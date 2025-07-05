@@ -1,0 +1,264 @@
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { searchService, SearchResult } from '../services/searchService';
+import { useSupabaseWorkspace } from './SupabaseWorkspaceContext';
+import { Task, Page } from '../types';
+
+interface SearchContextType {
+  // Search state
+  isSearchOpen: boolean;
+  openSearch: () => void;
+  closeSearch: () => void;
+  
+  // Search results
+  results: SearchResult[];
+  loading: boolean;
+  error: string | null;
+  
+  // Search methods
+  search: (query: string, options?: any) => Promise<void>;
+  clearResults: () => void;
+  
+  // Index management
+  indexWorkspaceData: (workspaceId: string) => Promise<void>;
+  reindexAll: () => Promise<void>;
+  
+  // Quick search
+  quickSearch: (query: string) => Promise<SearchResult[]>;
+  
+  // Recent searches
+  recentSearches: string[];
+  addRecentSearch: (query: string) => void;
+  clearRecentSearches: () => void;
+}
+
+const SearchContext = createContext<SearchContextType | undefined>(undefined);
+
+export const useSearch = () => {
+  const context = useContext(SearchContext);
+  if (!context) {
+    throw new Error('useSearch must be used within a SearchProvider');
+  }
+  return context;
+};
+
+interface SearchProviderProps {
+  children: React.ReactNode;
+}
+
+export const SearchProvider: React.FC<SearchProviderProps> = ({ children }) => {
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  
+  const { workspace, workspaces, pages, tasks, members } = useSupabaseWorkspace();
+
+  // Load recent searches from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('recentSearches');
+    if (saved) {
+      try {
+        setRecentSearches(JSON.parse(saved));
+      } catch (error) {
+        console.error('Failed to load recent searches:', error);
+      }
+    }
+  }, []);
+
+  // Save recent searches to localStorage
+  const saveRecentSearches = useCallback((searches: string[]) => {
+    localStorage.setItem('recentSearches', JSON.stringify(searches));
+  }, []);
+
+  // Open search modal
+  const openSearch = useCallback(() => {
+    setIsSearchOpen(true);
+  }, []);
+
+  // Close search modal
+  const closeSearch = useCallback(() => {
+    setIsSearchOpen(false);
+  }, []);
+
+  // Add recent search
+  const addRecentSearch = useCallback((query: string) => {
+    if (!query.trim()) return;
+    
+    const updated = [query, ...recentSearches.filter(s => s !== query)].slice(0, 10);
+    setRecentSearches(updated);
+    saveRecentSearches(updated);
+  }, [recentSearches, saveRecentSearches]);
+
+  // Clear recent searches
+  const clearRecentSearches = useCallback(() => {
+    setRecentSearches([]);
+    localStorage.removeItem('recentSearches');
+  }, []);
+
+  // Index workspace data
+  const indexWorkspaceData = useCallback(async (workspaceId: string) => {
+    try {
+      const targetWorkspace = workspaces.find(w => w.id === workspaceId);
+      if (!targetWorkspace) return;
+
+      // Index tasks
+      const workspaceTasks = tasks.filter(task => task.workspaceId === workspaceId);
+      if (workspaceTasks.length > 0) {
+        searchService.indexTasks(workspaceTasks, workspaceId, targetWorkspace.name);
+      }
+
+      // Index pages
+      const workspacePages = pages.filter(page => page.workspaceId === workspaceId);
+      if (workspacePages.length > 0) {
+        searchService.indexPages(workspacePages, workspaceId, targetWorkspace.name);
+      }
+
+      // Index members
+      const workspaceMembers = members.filter(member => member.workspaceId === workspaceId);
+      if (workspaceMembers.length > 0) {
+        searchService.indexMembers(workspaceMembers, workspaceId, targetWorkspace.name);
+      }
+    } catch (error) {
+      console.error('Failed to index workspace data:', error);
+    }
+  }, [workspaces, tasks, pages, members]);
+
+  // Reindex all workspaces
+  const reindexAll = useCallback(async () => {
+    try {
+      searchService.clearIndex();
+      
+      for (const ws of workspaces) {
+        await indexWorkspaceData(ws.id);
+      }
+    } catch (error) {
+      console.error('Failed to reindex all data:', error);
+    }
+  }, [workspaces, indexWorkspaceData]);
+
+  // Perform search
+  const search = useCallback(async (query: string, options: any = {}) => {
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const searchOptions = {
+        query,
+        filters: {
+          workspaceIds: workspace ? [workspace.id] : workspaces.map(w => w.id),
+          ...options.filters
+        },
+        limit: options.limit || 20,
+        offset: options.offset || 0,
+        sortBy: options.sortBy || 'relevance',
+        sortOrder: options.sortOrder || 'desc',
+        includeContent: options.includeContent !== false,
+        fuzzySearch: options.fuzzySearch !== false
+      };
+
+      const response = await searchService.search(searchOptions);
+      setResults(response.results);
+      
+      // Add to recent searches
+      addRecentSearch(query);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Search failed');
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [workspace, workspaces, addRecentSearch]);
+
+  // Quick search for autocomplete/suggestions
+  const quickSearch = useCallback(async (query: string): Promise<SearchResult[]> => {
+    if (!query.trim()) return [];
+
+    try {
+      const searchOptions = {
+        query,
+        filters: {
+          workspaceIds: workspace ? [workspace.id] : workspaces.map(w => w.id)
+        },
+        limit: 5,
+        sortBy: 'relevance' as const,
+        includeContent: false,
+        fuzzySearch: true
+      };
+
+      const response = await searchService.search(searchOptions);
+      return response.results;
+    } catch (error) {
+      console.error('Quick search failed:', error);
+      return [];
+    }
+  }, [workspace, workspaces]);
+
+  // Clear search results
+  const clearResults = useCallback(() => {
+    setResults([]);
+    setError(null);
+  }, []);
+
+  // Auto-index data when workspace data changes
+  useEffect(() => {
+    if (workspace) {
+      indexWorkspaceData(workspace.id);
+    }
+  }, [workspace, indexWorkspaceData, tasks, pages, members]);
+
+  // Global keyboard shortcut for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + K to open search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        openSearch();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [openSearch]);
+
+  const value: SearchContextType = {
+    // Search state
+    isSearchOpen,
+    openSearch,
+    closeSearch,
+    
+    // Search results
+    results,
+    loading,
+    error,
+    
+    // Search methods
+    search,
+    clearResults,
+    
+    // Index management
+    indexWorkspaceData,
+    reindexAll,
+    
+    // Quick search
+    quickSearch,
+    
+    // Recent searches
+    recentSearches,
+    addRecentSearch,
+    clearRecentSearches
+  };
+
+  return (
+    <SearchContext.Provider value={value}>
+      {children}
+    </SearchContext.Provider>
+  );
+};
+
+export default SearchProvider;
