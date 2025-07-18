@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -7,24 +7,31 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { X, Image, Link, Calendar, Flag, Paperclip } from 'lucide-react';
+import { Link, Calendar, Flag } from 'lucide-react';
+import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { useSupabaseWorkspace } from '../contexts/SupabaseWorkspaceContext';
+import { toast } from '@/components/ui/sonner';
+import FileAttachmentManager from './FileAttachmentManager';
+import { TaskAttachment } from '../types';
 
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultStatus?: 'todo' | 'progress' | 'done';
 }
 
-const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose }) => {
+const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, defaultStatus = 'todo' }) => {
   const { addTask } = useTask();
+  const { user } = useSupabaseAuth();
+  const { currentWorkspace } = useSupabaseWorkspace();
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState('medium');
   const [link, setLink] = useState('');
   const [tags, setTags] = useState('');
-  const [attachedImage, setAttachedImage] = useState<string | null>(null);
-  const [attachedImageFile, setAttachedImageFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,12 +39,13 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose }) => {
       addTask({
         title: title.trim(),
         description: description.trim(),
-        status: 'todo',
+        status: defaultStatus,
         dueDate: dueDate || undefined,
-        priority: priority as 'low' | 'medium' | 'high',
+        priority: priority as 'low' | 'medium' | 'high' | 'urgent',
         link: link.trim() || undefined,
         tags: tags.trim().split(',').filter(tag => tag.trim()).map(tag => tag.trim()),
-        attachedImage: attachedImage || undefined
+
+        attachments: attachments
       });
       
       resetForm();
@@ -52,8 +60,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose }) => {
     setPriority('medium');
     setLink('');
     setTags('');
-    setAttachedImage(null);
-    setAttachedImageFile(null);
+    setAttachments([]);
   };
 
   const handleCancel = () => {
@@ -61,48 +68,11 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose }) => {
     onClose();
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      setAttachedImageFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setAttachedImage(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
-  const handlePaste = async (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (items) {
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith('image/')) {
-          const file = items[i].getAsFile();
-          if (file) {
-            setAttachedImageFile(file);
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              setAttachedImage(e.target?.result as string);
-            };
-            reader.readAsDataURL(file);
-          }
-        }
-      }
-    }
-  };
-
-  const removeImage = () => {
-    setAttachedImage(null);
-    setAttachedImageFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto sm:max-w-lg md:max-w-2xl mx-4 sm:mx-0">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-gray-800">Add New Task</DialogTitle>
         </DialogHeader>
@@ -129,10 +99,9 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose }) => {
             </Label>
             <Textarea
               id="description"
-              placeholder="Add more details about this task... (Ctrl/Cmd + V to paste images)"
+              placeholder="Add more details about this task..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              onPaste={handlePaste}
               rows={3}
               className="resize-none"
             />
@@ -164,7 +133,8 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose }) => {
                 <SelectContent>
                   <SelectItem value="low">🟢 Low</SelectItem>
                   <SelectItem value="medium">🟡 Medium</SelectItem>
-                  <SelectItem value="high">🔴 High</SelectItem>
+                  <SelectItem value="high">🟠 High</SelectItem>
+                  <SelectItem value="urgent">🔴 Urgent</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -196,54 +166,46 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose }) => {
             />
           </div>
 
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-              <Paperclip className="w-4 h-4" />
-              Attach Image
-            </Label>
-            
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2"
-              >
-                <Image className="w-4 h-4" />
-                Choose Image
-              </Button>
-              <p className="text-sm text-gray-500 flex items-center">
-                or paste image with Ctrl/Cmd + V
-              </p>
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
+          {/* File Attachments */}
+          {user && currentWorkspace && (
+            <FileAttachmentManager
+              workspaceId={currentWorkspace.id}
+              userId={user.id}
+              attachments={attachments.map(att => ({
+                id: att.id,
+                name: att.fileName,
+                originalName: att.originalName,
+                size: att.fileSize,
+                type: att.fileType,
+                url: att.fileUrl,
+                uploadedBy: att.uploadedBy,
+                uploadedAt: att.createdAt,
+                taskId: att.taskId,
+                commentId: att.commentId,
+                workspaceId: att.workspaceId
+              }))}
+              onAttachmentsChange={(newAttachments) => {
+                const convertedAttachments: TaskAttachment[] = newAttachments.map(att => ({
+                  id: att.id,
+                  workspaceId: att.workspaceId,
+                  taskId: att.taskId,
+                  commentId: att.commentId,
+                  fileName: att.name,
+                  originalName: att.originalName,
+                  fileSize: att.size,
+                  fileType: att.type,
+                  fileUrl: att.url,
+                  filePath: att.url,
+                  uploadedBy: att.uploadedBy,
+                  createdAt: att.uploadedAt,
+                  updatedAt: att.uploadedAt
+                }));
+                setAttachments(convertedAttachments);
+              }}
+              maxFiles={5}
+              showUploadArea={true}
             />
-
-            {attachedImage && (
-              <div className="relative inline-block">
-                <img
-                  src={attachedImage}
-                  alt="Attached"
-                  className="max-w-xs max-h-32 rounded-lg border object-cover"
-                />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={removeImage}
-                  className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full"
-                >
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
-            )}
-          </div>
+          )}
           
           <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
             <Button 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { searchService, SearchResult } from '../services/searchService';
 import { useSupabaseWorkspace } from './SupabaseWorkspaceContext';
+import { useTask } from './TaskContext';
 import { Task, Page } from '../types';
 
 interface SearchContextType {
@@ -51,8 +52,9 @@ export const SearchProvider: React.FC<SearchProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  
-  const { workspace, workspaces, pages, tasks, members } = useSupabaseWorkspace();
+
+  const { currentWorkspace, userWorkspaces, workspaceMembers } = useSupabaseWorkspace();
+  const { state } = useTask();
 
   // Load recent searches from localStorage
   useEffect(() => {
@@ -99,43 +101,50 @@ export const SearchProvider: React.FC<SearchProviderProps> = ({ children }) => {
   // Index workspace data
   const indexWorkspaceData = useCallback(async (workspaceId: string) => {
     try {
-      const targetWorkspace = workspaces.find(w => w.id === workspaceId);
+      const targetWorkspace = userWorkspaces.find(w => w.id === workspaceId);
       if (!targetWorkspace) return;
 
-      // Index tasks
-      const workspaceTasks = tasks.filter(task => task.workspaceId === workspaceId);
+      // Get all tasks from pages and unassigned tasks
+      const allTasks = [
+        ...state.unassignedTasks,
+        ...state.pages.flatMap(page => page.tasks || [])
+      ];
+
+      // Index tasks for this workspace
+      const workspaceTasks = allTasks.filter(task =>
+        task.pageId ? state.pages.find(p => p.id === task.pageId) : true
+      );
       if (workspaceTasks.length > 0) {
         searchService.indexTasks(workspaceTasks, workspaceId, targetWorkspace.name);
       }
 
-      // Index pages
-      const workspacePages = pages.filter(page => page.workspaceId === workspaceId);
-      if (workspacePages.length > 0) {
-        searchService.indexPages(workspacePages, workspaceId, targetWorkspace.name);
+      // Index pages for this workspace
+      if (state.pages.length > 0) {
+        searchService.indexPages(state.pages, workspaceId, targetWorkspace.name);
       }
 
-      // Index members
-      const workspaceMembers = members.filter(member => member.workspaceId === workspaceId);
-      if (workspaceMembers.length > 0) {
-        searchService.indexMembers(workspaceMembers, workspaceId, targetWorkspace.name);
+      // Index members for this workspace
+      const currentWorkspaceMembers = workspaceMembers.filter(member => member.workspaceId === workspaceId);
+      if (currentWorkspaceMembers.length > 0) {
+        searchService.indexMembers(currentWorkspaceMembers, workspaceId, targetWorkspace.name);
       }
     } catch (error) {
       console.error('Failed to index workspace data:', error);
     }
-  }, [workspaces, tasks, pages, members]);
+  }, [userWorkspaces, state.pages, state.unassignedTasks, workspaceMembers]);
 
   // Reindex all workspaces
   const reindexAll = useCallback(async () => {
     try {
       searchService.clearIndex();
-      
-      for (const ws of workspaces) {
+
+      for (const ws of userWorkspaces) {
         await indexWorkspaceData(ws.id);
       }
     } catch (error) {
       console.error('Failed to reindex all data:', error);
     }
-  }, [workspaces, indexWorkspaceData]);
+  }, [userWorkspaces, indexWorkspaceData]);
 
   // Perform search
   const search = useCallback(async (query: string, options: any = {}) => {
@@ -151,7 +160,7 @@ export const SearchProvider: React.FC<SearchProviderProps> = ({ children }) => {
       const searchOptions = {
         query,
         filters: {
-          workspaceIds: workspace ? [workspace.id] : workspaces.map(w => w.id),
+          workspaceIds: currentWorkspace ? [currentWorkspace.id] : userWorkspaces.map(w => w.id),
           ...options.filters
         },
         limit: options.limit || 20,
@@ -173,7 +182,7 @@ export const SearchProvider: React.FC<SearchProviderProps> = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [workspace, workspaces, addRecentSearch]);
+  }, [currentWorkspace, userWorkspaces, addRecentSearch]);
 
   // Quick search for autocomplete/suggestions
   const quickSearch = useCallback(async (query: string): Promise<SearchResult[]> => {
@@ -183,7 +192,7 @@ export const SearchProvider: React.FC<SearchProviderProps> = ({ children }) => {
       const searchOptions = {
         query,
         filters: {
-          workspaceIds: workspace ? [workspace.id] : workspaces.map(w => w.id)
+          workspaceIds: currentWorkspace ? [currentWorkspace.id] : userWorkspaces.map(w => w.id)
         },
         limit: 5,
         sortBy: 'relevance' as const,
@@ -197,7 +206,7 @@ export const SearchProvider: React.FC<SearchProviderProps> = ({ children }) => {
       console.error('Quick search failed:', error);
       return [];
     }
-  }, [workspace, workspaces]);
+  }, [currentWorkspace, userWorkspaces]);
 
   // Clear search results
   const clearResults = useCallback(() => {
@@ -207,10 +216,30 @@ export const SearchProvider: React.FC<SearchProviderProps> = ({ children }) => {
 
   // Auto-index data when workspace data changes
   useEffect(() => {
-    if (workspace) {
-      indexWorkspaceData(workspace.id);
+    if (currentWorkspace) {
+      indexWorkspaceData(currentWorkspace.id);
     }
-  }, [workspace, indexWorkspaceData, tasks, pages, members]);
+  }, [currentWorkspace, indexWorkspaceData, state.pages, state.unassignedTasks, workspaceMembers]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + K to open search modal
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        openSearch();
+      }
+
+      // Escape to close search modal
+      if (e.key === 'Escape' && isSearchOpen) {
+        e.preventDefault();
+        closeSearch();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSearchOpen, openSearch, closeSearch]);
 
   // Global keyboard shortcut for search
   useEffect(() => {

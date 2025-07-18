@@ -8,6 +8,8 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -97,17 +99,59 @@ export const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) 
     }
   };
 
+  // Sign in with email
+  const handleSignInWithEmail = async (email: string, password: string): Promise<void> => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('Error signing in with email:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Email sign in error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sign up with email
+  const handleSignUpWithEmail = async (email: string, password: string): Promise<void> => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('Error signing up with email:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Email sign up error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Sign out
   const handleSignOut = async (): Promise<void> => {
     try {
       setLoading(true);
       const { error } = await signOut();
-      
+
       if (error) {
         console.error('Error signing out:', error);
         throw error;
       }
-      
+
       // Clear local state
       setUser(null);
       setSession(null);
@@ -125,6 +169,8 @@ export const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) 
     session,
     loading,
     signInWithGoogle: handleSignInWithGoogle,
+    signInWithEmail: handleSignInWithEmail,
+    signUpWithEmail: handleSignUpWithEmail,
     signOut: handleSignOut,
     isAuthenticated: !!user
   };

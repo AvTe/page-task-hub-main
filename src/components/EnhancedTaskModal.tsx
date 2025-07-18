@@ -29,6 +29,8 @@ import { Task } from '../types';
 import SubtaskManager from './SubtaskManager';
 import TaskDependencyManager from './TaskDependencyManager';
 import FileAttachmentManager from './FileAttachmentManager';
+import TimeTracker from './TimeTracker';
+import TaskComments from './TaskComments';
 import { FileMetadata, fileUploadService } from '../services/fileUploadService';
 
 interface EnhancedTaskModalProps {
@@ -87,7 +89,8 @@ const EnhancedTaskModal: React.FC<EnhancedTaskModalProps> = ({
 
   const getPriorityColor = (priority?: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800 border-red-200';
+      case 'urgent': return 'bg-red-200 text-red-900 border-red-300';
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'low': return 'bg-green-100 text-green-800 border-green-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
@@ -105,7 +108,7 @@ const EnhancedTaskModal: React.FC<EnhancedTaskModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-0 w-[calc(100vw-2rem)] sm:w-auto">
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div className="flex-1">
@@ -141,7 +144,7 @@ const EnhancedTaskModal: React.FC<EnhancedTaskModalProps> = ({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="details" className="flex items-center gap-1">
               <FileText className="h-4 w-4" />
               Details
@@ -153,6 +156,10 @@ const EnhancedTaskModal: React.FC<EnhancedTaskModalProps> = ({
             <TabsTrigger value="dependencies" className="flex items-center gap-1">
               <GitBranch className="h-4 w-4" />
               Dependencies
+            </TabsTrigger>
+            <TabsTrigger value="time" className="flex items-center gap-1">
+              <Clock className="h-4 w-4" />
+              Time
             </TabsTrigger>
             <TabsTrigger value="comments" className="flex items-center gap-1">
               <MessageSquare className="h-4 w-4" />
@@ -198,6 +205,7 @@ const EnhancedTaskModal: React.FC<EnhancedTaskModalProps> = ({
                       <SelectItem value="low">Low</SelectItem>
                       <SelectItem value="medium">Medium</SelectItem>
                       <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="urgent">Urgent</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -342,11 +350,17 @@ const EnhancedTaskModal: React.FC<EnhancedTaskModalProps> = ({
           </TabsContent>
 
           <TabsContent value="comments" className="mt-6">
-            <div className="text-center py-8 text-muted-foreground">
-              <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>Comments feature coming soon</p>
-              <p className="text-sm">Collaborate with your team on tasks</p>
-            </div>
+            <TaskComments
+              taskId={task.id}
+              taskTitle={task.title}
+            />
+          </TabsContent>
+
+          <TabsContent value="time" className="mt-6">
+            <TimeTracker
+              taskId={task.id}
+              taskTitle={task.title}
+            />
           </TabsContent>
 
           <TabsContent value="attachments" className="mt-6">

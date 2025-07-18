@@ -120,18 +120,18 @@ class FileUploadService {
         };
       }
 
-      // Save file metadata to database
-      const fileMetadata: Omit<FileMetadata, 'id'> = {
-        name: filePath,
-        originalName: file.name,
-        size: file.size,
-        type: file.type,
-        url: urlData.publicUrl,
-        uploadedBy: userId,
-        uploadedAt: new Date().toISOString(),
-        taskId,
-        commentId,
-        workspaceId
+      // Save file metadata to database (using snake_case for database)
+      const fileMetadata = {
+        workspace_id: workspaceId,
+        task_id: taskId,
+        comment_id: commentId,
+        file_name: filePath,
+        original_name: file.name,
+        file_size: file.size,
+        file_type: file.type,
+        file_url: urlData.publicUrl,
+        file_path: filePath,
+        uploaded_by: userId
       };
 
       const { data: dbData, error: dbError } = await supabase
@@ -143,7 +143,7 @@ class FileUploadService {
       if (dbError) {
         console.error('Database error:', dbError);
         // Try to clean up uploaded file
-        await this.deleteFile(filePath, workspaceId);
+        await this.deleteFileByPath(filePath, workspaceId);
         return {
           success: false,
           error: 'Failed to save file metadata'
@@ -183,8 +183,45 @@ class FileUploadService {
     return results;
   }
 
-  // Delete file
-  async deleteFile(filePath: string, workspaceId: string): Promise<boolean> {
+  // Delete file by ID
+  async deleteFile(fileId: string): Promise<boolean> {
+    try {
+      // First get the file metadata to get the file path
+      const metadata = await this.getFileMetadata(fileId);
+      if (!metadata) {
+        return false;
+      }
+
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from(this.BUCKET_NAME)
+        .remove([metadata.filePath]);
+
+      if (storageError) {
+        console.error('Storage deletion error:', storageError);
+        return false;
+      }
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('file_attachments')
+        .delete()
+        .eq('id', fileId);
+
+      if (dbError) {
+        console.error('Database deletion error:', dbError);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('File deletion error:', error);
+      return false;
+    }
+  }
+
+  // Delete file by path (internal method)
+  async deleteFileByPath(filePath: string, workspaceId: string): Promise<boolean> {
     try {
       // Delete from storage
       const { error: storageError } = await supabase.storage
@@ -228,7 +265,22 @@ class FileUploadService {
         return null;
       }
 
-      return data as FileMetadata;
+      // Map database columns to interface
+      return {
+        id: data.id,
+        workspaceId: data.workspace_id,
+        taskId: data.task_id,
+        commentId: data.comment_id,
+        fileName: data.file_name,
+        originalName: data.original_name,
+        fileSize: data.file_size,
+        fileType: data.file_type,
+        fileUrl: data.file_url,
+        filePath: data.file_path,
+        uploadedBy: data.uploaded_by,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      } as FileMetadata;
     } catch (error) {
       console.error('Get file metadata error:', error);
       return null;
@@ -242,14 +294,29 @@ class FileUploadService {
         .from('file_attachments')
         .select('*')
         .eq('task_id', taskId)
-        .order('uploaded_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Get task files error:', error);
         return [];
       }
 
-      return data as FileMetadata[];
+      // Map each item from database format to interface format
+      return data.map(item => ({
+        id: item.id,
+        workspaceId: item.workspace_id,
+        taskId: item.task_id,
+        commentId: item.comment_id,
+        fileName: item.file_name,
+        originalName: item.original_name,
+        fileSize: item.file_size,
+        fileType: item.file_type,
+        fileUrl: item.file_url,
+        filePath: item.file_path,
+        uploadedBy: item.uploaded_by,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at
+      }));
     } catch (error) {
       console.error('Get task files error:', error);
       return [];

@@ -3,13 +3,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTask } from '../contexts/TaskContext';
 import { CATEGORIES, PAGE_COLORS } from '../types';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Plus, Globe } from 'lucide-react';
+import { ArrowLeft, Plus, Globe, Save } from 'lucide-react';
+import ModernLayout from '../components/ModernLayout';
 
 const AddPage: React.FC = () => {
   const navigate = useNavigate();
@@ -36,36 +37,38 @@ const AddPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <Button
-            variant="ghost"
-            onClick={() => navigate(-1)}
-            className="mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Add New Page
-          </h1>
-          <p className="text-gray-600">
-            Create a new page to organize your tasks by project, category, or website.
-          </p>
+    <ModernLayout>
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Button
+              variant="ghost"
+              onClick={() => navigate(-1)}
+              className="mb-4"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              Add New Website
+            </h1>
+            <p className="text-muted-foreground">
+              Create a new website project to organize your tasks.
+            </p>
+          </div>
         </div>
 
-        <Card className="border-2 border-gradient-to-r from-coral-orange to-cornflower-blue">
-          <CardHeader className="bg-gradient-to-r from-coral-orange/10 to-cornflower-blue/10">
+        <Card className="card-modern">
+          <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-coral-orange to-cornflower-blue rounded-lg flex items-center justify-center">
-                <Plus className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
+                <Globe className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold">Page Details</h2>
-                <p className="text-sm text-gray-600">
-                  Fill in the information below to create your new page
+                <CardTitle className="text-xl">Website Details</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Fill in the information below to create your new website project
                 </p>
               </div>
             </div>
@@ -75,32 +78,46 @@ const AddPage: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <Label htmlFor="title" className="text-base font-medium">
-                  Page Title *
+                  Website Title *
                 </Label>
                 <Input
                   id="title"
-                  placeholder="e.g., Website Redesign, Shopping List, Work Tasks"
+                  placeholder="e.g., E-commerce Store, Portfolio Website, Blog"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className="mt-2"
                   required
                 />
               </div>
-              
+
+              <div>
+                <Label htmlFor="url" className="text-base font-medium">
+                  Website URL
+                </Label>
+                <Input
+                  id="url"
+                  placeholder="https://example.com"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="mt-2"
+                  type="url"
+                />
+              </div>
+
               <div>
                 <Label htmlFor="description" className="text-base font-medium">
                   Description
                 </Label>
                 <Textarea
                   id="description"
-                  placeholder="Brief description of what this page is for..."
+                  placeholder="Brief description of this website project..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="mt-2"
                   rows={4}
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="category" className="text-base font-medium">
                   Category *
@@ -118,25 +135,7 @@ const AddPage: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              
-              <div>
-                <Label htmlFor="url" className="text-base font-medium flex items-center gap-2">
-                  <Globe className="w-4 h-4" />
-                  Website URL (optional)
-                </Label>
-                <Input
-                  id="url"
-                  type="url"
-                  placeholder="https://example.com"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="mt-2"
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                  Add a website URL if this page is related to a specific site
-                </p>
-              </div>
-              
+
               <div>
                 <Label className="text-base font-medium">Color Theme</Label>
                 <div className="flex flex-wrap gap-3 mt-3">
@@ -145,9 +144,9 @@ const AddPage: React.FC = () => {
                       key={color}
                       type="button"
                       className={`w-12 h-12 rounded-lg border-2 transition-all duration-200 hover:scale-110 ${
-                        selectedColor === color 
-                          ? 'border-gray-800 shadow-lg' 
-                          : 'border-gray-300 hover:border-gray-400'
+                        selectedColor === color
+                          ? 'border-primary shadow-lg'
+                          : 'border-border hover:border-primary/50'
                       }`}
                       style={{ backgroundColor: color }}
                       onClick={() => setSelectedColor(color)}
@@ -155,19 +154,19 @@ const AddPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-              
+
               <div className="flex gap-3 pt-6 border-t">
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={!title.trim() || !category}
-                  className="flex-1 bg-gradient-to-r from-coral-orange to-cornflower-blue hover:from-coral-orange/90 hover:to-cornflower-blue/90"
+                  className="flex-1 btn-orange"
                 >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Page
+                  <Save className="w-4 h-4 mr-2" />
+                  Create Website
                 </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => navigate('/tasker')}
                   className="px-8"
                 >
@@ -178,7 +177,7 @@ const AddPage: React.FC = () => {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </ModernLayout>
   );
 };
 

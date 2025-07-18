@@ -1,31 +1,30 @@
 import React, { useState } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { Task, TASK_STATUSES } from '../types';
+import { handleDragStart, handleDragEnd } from '../utils/dragDrop';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar, Link as LinkIcon, Flag, Paperclip, Trash2, Edit2, Copy } from 'lucide-react';
+import TaskStatusDropdown from './TaskStatusDropdown';
 
 interface TaskCardProps {
   task: Task;
   index: number;
   pageId?: string;
   showFullDetails?: boolean;
+  onTaskClick?: (task: Task) => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, index, pageId, showFullDetails = false }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, index, pageId, showFullDetails = false, onTaskClick }) => {
   const { updateTask, deleteTask, duplicateTask, state } = useTask();
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
   const [showDuplicateOptions, setShowDuplicateOptions] = useState(false);
   
-  const handleDragStart = (event: React.DragEvent) => {
-    event.dataTransfer.setData('application/json', JSON.stringify({
-      type: 'task',
-      taskId: task.id,
-      sourcePageId: pageId
-    }));
+  const handleTaskDragStart = (event: React.DragEvent) => {
+    handleDragStart(event, task, pageId, index);
   };
 
   const handleStatusClick = () => {
@@ -62,35 +61,38 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, index, pageId, showFullDetail
   const priorityColors = {
     low: 'bg-green-100 text-green-800',
     medium: 'bg-yellow-100 text-yellow-800',
-    high: 'bg-red-100 text-red-800'
+    high: 'bg-orange-100 text-orange-800',
+    urgent: 'bg-red-100 text-red-800'
   };
 
   const priorityIcons = {
     low: '🟢',
     medium: '🟡',
-    high: '🔴'
+    high: '🟠',
+    urgent: '🔴'
   };
 
   return (
-    <Card 
+    <Card
       className={`cursor-move hover:shadow-md transition-all duration-200 border-l-4 ${
         task.status === 'done' ? 'opacity-75' : ''
-      }`}
+      } ${onTaskClick ? 'cursor-pointer' : ''}`}
       style={{ borderLeftColor: TASK_STATUSES[task.status].color.replace('bg-', '#') }}
       draggable
-      onDragStart={handleDragStart}
+      onDragStart={handleTaskDragStart}
+      onDragEnd={handleDragEnd}
+      onClick={() => onTaskClick?.(task)}
     >
       <CardContent className="p-4 space-y-3">
         {/* Header with status and actions */}
         <div className="flex items-start justify-between gap-2">
-          <Button
-            variant="ghost"
+          <TaskStatusDropdown
+            taskId={task.id}
+            currentStatus={task.status}
             size="sm"
-            onClick={handleStatusClick}
-            className={`h-6 px-2 text-xs font-medium ${TASK_STATUSES[task.status].color} ${TASK_STATUSES[task.status].textColor} hover:opacity-80`}
-          >
-            {TASK_STATUSES[task.status].label}
-          </Button>
+            variant="badge"
+            showDelete={false}
+          />
           
           <div className="flex gap-1">
             <div className="relative">
@@ -245,11 +247,14 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, index, pageId, showFullDetail
             </Badge>
           )}
 
-          {/* Image indicator */}
-          {task.attachedImage && !showFullDetails && (
+          {/* Attachments indicator */}
+          {((task.attachments && task.attachments.length > 0) || task.attachedImage) && !showFullDetails && (
             <Badge variant="outline" className="px-2 py-0.5">
               <Paperclip className="w-3 h-3 mr-1" />
-              Image
+              {task.attachments && task.attachments.length > 0
+                ? `${task.attachments.length} file${task.attachments.length > 1 ? 's' : ''}`
+                : 'Image'
+              }
             </Badge>
           )}
         </div>

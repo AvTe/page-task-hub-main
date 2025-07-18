@@ -11,9 +11,10 @@ import TaskCard from './TaskCard';
 
 interface PageCardProps {
   page: Page;
+  onTaskClick?: (task: any) => void;
 }
 
-const PageCard: React.FC<PageCardProps> = ({ page }) => {
+const PageCard: React.FC<PageCardProps> = ({ page, onTaskClick }) => {
   const { deletePage, moveTask } = useTask();
 
   const handleDeletePage = () => {
@@ -87,11 +88,12 @@ const PageCard: React.FC<PageCardProps> = ({ page }) => {
                 <h4 className="text-sm font-medium text-gray-500 mb-2">To Do</h4>
                 <div className="space-y-1">
                   {tasksByStatus.todo.map((task, index) => (
-                    <TaskCard 
-                      key={task.id} 
-                      task={task} 
-                      pageId={page.id} 
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      pageId={page.id}
                       index={index}
+                      onTaskClick={onTaskClick}
                     />
                   ))}
                 </div>
@@ -104,11 +106,12 @@ const PageCard: React.FC<PageCardProps> = ({ page }) => {
                 <h4 className="text-sm font-medium text-gray-500 mb-2">In Progress</h4>
                 <div className="space-y-1">
                   {tasksByStatus.progress.map((task, index) => (
-                    <TaskCard 
-                      key={task.id} 
-                      task={task} 
-                      pageId={page.id} 
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      pageId={page.id}
                       index={index}
+                      onTaskClick={onTaskClick}
                     />
                   ))}
                 </div>
@@ -121,11 +124,12 @@ const PageCard: React.FC<PageCardProps> = ({ page }) => {
                 <h4 className="text-sm font-medium text-gray-500 mb-2">Done</h4>
                 <div className="space-y-1">
                   {tasksByStatus.done.map((task, index) => (
-                    <TaskCard 
-                      key={task.id} 
-                      task={task} 
-                      pageId={page.id} 
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      pageId={page.id}
                       index={index}
+                      onTaskClick={onTaskClick}
                     />
                   ))}
                 </div>

@@ -9,7 +9,6 @@ const Login: React.FC = () => {
   const { signInWithGoogle, loading } = useAuth();
 
   const handleSignIn = async () => {
-    console.log('Login button clicked');
     await signInWithGoogle();
   };
 
@@ -17,16 +16,16 @@ const Login: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-coral-orange to-cornflower-blue bg-clip-text text-transparent">
-            Welcome to ProjectManager
+          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
+            Welcome to EasTask
           </CardTitle>
           <CardDescription className="text-lg">
-            Sign in to manage your projects and tasks
+            Professional task management for teams and individuals
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="text-center space-y-4">
-            <div className="w-20 h-20 bg-gradient-to-r from-coral-orange to-cornflower-blue rounded-full flex items-center justify-center mx-auto">
+            <div className="w-20 h-20 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full flex items-center justify-center mx-auto">
               <Chrome className="w-10 h-10 text-white" />
             </div>
             <p className="text-gray-600">

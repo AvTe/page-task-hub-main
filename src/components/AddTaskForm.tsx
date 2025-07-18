@@ -29,7 +29,7 @@ const AddTaskForm: React.FC = () => {
         description: description.trim(),
         status: 'todo',
         dueDate: dueDate || undefined,
-        priority: priority as 'low' | 'medium' | 'high',
+        priority: priority as 'low' | 'medium' | 'high' | 'urgent',
         link: link.trim() || undefined,
         tags: tags.trim().split(',').filter(tag => tag.trim()).map(tag => tag.trim()),
         attachedImage: attachedImage || undefined
@@ -184,7 +184,8 @@ const AddTaskForm: React.FC = () => {
                 <SelectContent>
                   <SelectItem value="low">🟢 Low</SelectItem>
                   <SelectItem value="medium">🟡 Medium</SelectItem>
-                  <SelectItem value="high">🔴 High</SelectItem>
+                  <SelectItem value="high">🟠 High</SelectItem>
+                  <SelectItem value="urgent">🔴 Urgent</SelectItem>
                 </SelectContent>
               </Select>
             </div>

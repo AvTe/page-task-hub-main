@@ -2,6 +2,102 @@
 -- Page Task Hub - Database Functions and Triggers
 -- =====================================================
 
+-- Function to accept workspace invitation
+CREATE OR REPLACE FUNCTION accept_workspace_invitation(
+  invitation_id UUID,
+  user_id UUID
+) RETURNS VOID AS $$
+DECLARE
+  invitation_record workspace_invitations%ROWTYPE;
+BEGIN
+  -- Get the invitation details
+  SELECT * INTO invitation_record
+  FROM workspace_invitations
+  WHERE id = invitation_id
+    AND status = 'pending'
+    AND expires_at > NOW();
+
+  -- Check if invitation exists and is valid
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invalid or expired invitation';
+  END IF;
+
+  -- Check if user is already a member
+  IF EXISTS (
+    SELECT 1 FROM workspace_members
+    WHERE workspace_id = invitation_record.workspace_id
+      AND user_id = user_id
+  ) THEN
+    RAISE EXCEPTION 'User is already a member of this workspace';
+  END IF;
+
+  -- Add user to workspace
+  INSERT INTO workspace_members (
+    workspace_id,
+    user_id,
+    role,
+    joined_at
+  ) VALUES (
+    invitation_record.workspace_id,
+    user_id,
+    invitation_record.role,
+    NOW()
+  );
+
+  -- Update invitation status
+  UPDATE workspace_invitations
+  SET status = 'accepted'
+  WHERE id = invitation_id;
+
+  -- Log activity
+  INSERT INTO user_activities (
+    user_id,
+    workspace_id,
+    activity_type,
+    activity_data,
+    timestamp
+  ) VALUES (
+    user_id,
+    invitation_record.workspace_id,
+    'member_joined',
+    jsonb_build_object(
+      'workspace_name', invitation_record.workspace_name,
+      'invited_by', invitation_record.invited_by_name
+    ),
+    NOW()
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to decline workspace invitation
+CREATE OR REPLACE FUNCTION decline_workspace_invitation(
+  invitation_id UUID,
+  user_id UUID
+) RETURNS VOID AS $$
+DECLARE
+  invitation_record workspace_invitations%ROWTYPE;
+BEGIN
+  -- Get the invitation details
+  SELECT * INTO invitation_record
+  FROM workspace_invitations
+  WHERE id = invitation_id
+    AND status = 'pending'
+    AND invitee_email = (
+      SELECT email FROM auth.users WHERE id = user_id
+    );
+
+  -- Check if invitation exists and belongs to user
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invalid invitation or not authorized';
+  END IF;
+
+  -- Update invitation status
+  UPDATE workspace_invitations
+  SET status = 'declined'
+  WHERE id = invitation_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- =====================================================
 -- 1. UPDATED_AT TRIGGER FUNCTION
 -- =====================================================

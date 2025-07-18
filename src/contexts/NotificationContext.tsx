@@ -7,7 +7,7 @@ export interface Notification {
   id: string;
   user_id: string;
   workspace_id?: string;
-  type: 'invitation' | 'task_assignment' | 'task_update' | 'workspace_update' | 'mention' | 'system';
+  type: 'invitation' | 'task_assignment' | 'task_update' | 'workspace_update' | 'mention' | 'system' | 'task_comment' | 'task_status_change' | 'workspace_invitation';
   title: string;
   message: string;
   data: Record<string, any>;
@@ -126,12 +126,56 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (error) throw error;
-
-      dispatch({ type: 'SET_NOTIFICATIONS', payload: data || [] });
+      if (error) {
+        console.error('Error loading notifications:', error);
+        // If table doesn't exist, create demo notifications
+        if (error.message.includes('relation "notifications" does not exist')) {
+          console.log('📧 Notifications table not found - using demo notifications');
+          const demoNotifications: Notification[] = [
+            {
+              id: 'demo-1',
+              user_id: user.id,
+              type: 'system',
+              title: 'Welcome to EasTask!',
+              message: 'Your notification system is ready. Set up the database to enable full functionality.',
+              data: { demo: true },
+              read: false,
+              created_at: new Date().toISOString()
+            },
+            {
+              id: 'demo-2',
+              user_id: user.id,
+              type: 'system',
+              title: 'Database Setup Required',
+              message: 'Run the database setup script to enable notifications.',
+              data: { demo: true, action: 'setup_database' },
+              read: false,
+              created_at: new Date(Date.now() - 60000).toISOString()
+            }
+          ];
+          dispatch({ type: 'SET_NOTIFICATIONS', payload: demoNotifications });
+        } else {
+          throw error;
+        }
+      } else {
+        dispatch({ type: 'SET_NOTIFICATIONS', payload: data || [] });
+      }
     } catch (error) {
       console.error('Error loading notifications:', error);
-      toast.error('Failed to load notifications');
+      // Fallback to demo notifications on any error
+      const demoNotifications: Notification[] = [
+        {
+          id: 'demo-error',
+          user_id: user.id,
+          type: 'system',
+          title: 'Notification System',
+          message: 'Unable to load notifications. Please check database setup.',
+          data: { demo: true, error: true },
+          read: false,
+          created_at: new Date().toISOString()
+        }
+      ];
+      dispatch({ type: 'SET_NOTIFICATIONS', payload: demoNotifications });
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -140,16 +184,29 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   // Mark notification as read
   const markAsRead = async (notificationId: string) => {
     try {
+      // If it's a demo notification, just update locally
+      if (notificationId.startsWith('demo-')) {
+        dispatch({ type: 'MARK_AS_READ', payload: notificationId });
+        return;
+      }
+
       const { error } = await supabase
         .from('notifications')
         .update({ read: true })
         .eq('id', notificationId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error marking notification as read:', error);
+        // Still update locally even if database update fails
+        dispatch({ type: 'MARK_AS_READ', payload: notificationId });
+        return;
+      }
 
       dispatch({ type: 'MARK_AS_READ', payload: notificationId });
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      // Update locally as fallback
+      dispatch({ type: 'MARK_AS_READ', payload: notificationId });
     }
   };
 

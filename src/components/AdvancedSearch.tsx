@@ -402,7 +402,7 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Priority</label>
                     <div className="space-y-2">
-                      {['high', 'medium', 'low'].map(priority => (
+                      {['urgent', 'high', 'medium', 'low'].map(priority => (
                         <div key={priority} className="flex items-center space-x-2">
                           <Checkbox
                             id={priority}

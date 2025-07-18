@@ -1,47 +1,121 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Progress } from '@/components/ui/progress';
-import { 
-  Plus, 
-  Trash2, 
-  GripVertical, 
-  Calendar as CalendarIcon, 
-  User, 
-  CheckSquare,
-  Square,
-  MoreHorizontal
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Plus,
+  Trash2,
+  Edit3,
+  CheckCircle2,
+  Circle,
+  Clock,
+  User,
+  Calendar,
+  Loader2,
+  GripVertical
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { SubTask, Task } from '../types';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/SupabaseAuthContext';
+import { useSupabaseWorkspace } from '../contexts/SupabaseWorkspaceContext';
 
-interface SubtaskManagerProps {
-  task: Task;
-  onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
-  workspaceMembers?: Array<{ id: string; name: string; email: string }>;
+interface Subtask {
+  id: string;
+  parent_task_id: string;
+  title: string;
+  description?: string;
+  status: 'todo' | 'progress' | 'done';
+  assigned_to?: string;
+  due_date?: string;
+  completed_at?: string;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  assignee?: {
+    id: string;
+    email: string;
+    user_metadata?: {
+      full_name?: string;
+    };
+  };
 }
 
-const SubtaskManager: React.FC<SubtaskManagerProps> = ({ 
-  task, 
-  onUpdateTask, 
-  workspaceMembers = [] 
-}) => {
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
-  const [editingSubtask, setEditingSubtask] = useState<SubTask | null>(null);
+interface SubtaskManagerProps {
+  taskId: string;
+  taskTitle: string;
+  onProgressUpdate?: (progress: number) => void;
+}
 
-  const subtasks = task.subtasks || [];
-  const completedSubtasks = subtasks.filter(st => st.completed).length;
-  const progressPercentage = subtasks.length > 0 ? (completedSubtasks / subtasks.length) * 100 : 0;
+const SubtaskManager: React.FC<SubtaskManagerProps> = ({
+  taskId,
+  taskTitle,
+  onProgressUpdate
+}) => {
+  const { user } = useAuth();
+  const { workspaceMembers } = useSupabaseWorkspace();
+
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [editingSubtask, setEditingSubtask] = useState<string | null>(null);
+
+  const [newSubtask, setNewSubtask] = useState({
+    title: '',
+    description: '',
+    assigned_to: '',
+    due_date: ''
+  });
+
+  // Load subtasks
+  useEffect(() => {
+    loadSubtasks();
+  }, [taskId]);
+
+  // Calculate progress when subtasks change
+  useEffect(() => {
+    const completedCount = subtasks.filter(st => st.status === 'done').length;
+    const progress = subtasks.length > 0 ? Math.round((completedCount / subtasks.length) * 100) : 0;
+    onProgressUpdate?.(progress);
+  }, [subtasks, onProgressUpdate]);
+
+  const loadSubtasks = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('subtasks')
+        .select(`
+          *,
+          assignee:auth.users!subtasks_assigned_to_fkey(
+            id,
+            email,
+            raw_user_meta_data
+          )
+        `)
+        .eq('parent_task_id', taskId)
+        .order('order_index', { ascending: true });
+
+      if (error) {
+        console.error('Error loading subtasks:', error);
+        setError('Failed to load subtasks');
+        return;
+      }
+
+      setSubtasks(data || []);
+    } catch (error) {
+      console.error('Error loading subtasks:', error);
+      setError('Failed to load subtasks');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const addSubtask = () => {
     if (!newSubtaskTitle.trim()) return;

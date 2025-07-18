@@ -292,12 +292,12 @@ const SearchCommandPalette: React.FC<SearchCommandPaletteProps> = ({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + K to open command palette
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      // Cmd/Ctrl + Shift + K to open command palette (different from search)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
         e.preventDefault();
         setOpen(true);
       }
-      
+
       // Escape to close
       if (e.key === 'Escape') {
         setOpen(false);

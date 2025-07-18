@@ -54,7 +54,7 @@ const AddPageModal: React.FC<AddPageModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md mx-4 sm:mx-0">
         <DialogHeader>
           <DialogTitle>Add New Page</DialogTitle>
           <DialogDescription>

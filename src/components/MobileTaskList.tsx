@@ -31,7 +31,7 @@ interface MobileTaskListProps {
 
 type SortOption = 'dueDate' | 'priority' | 'status' | 'created' | 'title';
 type FilterStatus = 'all' | 'todo' | 'progress' | 'done';
-type FilterPriority = 'all' | 'high' | 'medium' | 'low';
+type FilterPriority = 'all' | 'urgent' | 'high' | 'medium' | 'low';
 
 const MobileTaskList: React.FC<MobileTaskListProps> = ({
   tasks,
@@ -228,6 +228,7 @@ const MobileTaskList: React.FC<MobileTaskListProps> = ({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Priority</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
                 <SelectItem value="high">High</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
                 <SelectItem value="low">Low</SelectItem>

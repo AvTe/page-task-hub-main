@@ -1,56 +1,145 @@
 
 
+import React, { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { SupabaseAuthProvider } from "./contexts/SupabaseAuthContext";
 import { SupabaseWorkspaceProvider } from "./contexts/SupabaseWorkspaceContext";
 import { TaskProvider } from "./contexts/TaskContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
-// import { SearchProvider, useSearch } from "./contexts/SearchContext";
+import { SearchProvider, useSearch } from "./contexts/SearchContext";
 import ErrorBoundary from "./components/ErrorBoundary";
+import AsyncErrorBoundary from "./components/AsyncErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CollaborationOverlay from "./components/CollaborationOverlay";
 import Navbar from "./components/Navbar";
-// import GlobalSearchModal from "./components/GlobalSearchModal";
-// import SearchCommandPalette from "./components/SearchCommandPalette";
-import Home from "./pages/Home";
-import Tasker from "./pages/Tasker";
+import SearchCommandPalette from "./components/SearchCommandPalette";
+import GlobalSearchModal from "./components/GlobalSearchModal";
+
+// Lazy-loaded components
+import {
+  LazyHome,
+  LazyTasker,
+  LazyProfile,
+  LazySettings,
+  LazyWorkspaceManagement,
+  LazyCalendar,
+  LazyAnalytics,
+  LazyTeam,
+  LazyWebsites,
+  LazyNotificationCenter,
+  preloadCriticalComponents
+} from "./components/routes/LazyRoutes";
+
+// Suspense wrappers
+import LazyPageWrapper from "./components/suspense/LazyPageWrapper";
+import SuspenseWrapper from "./components/suspense/SuspenseWrapper";
+
+// Non-lazy components (keep these for critical path)
 import AddPage from "./pages/AddPage";
 import JoinWorkspace from "./pages/JoinWorkspace";
 import WebsiteManager from "./components/WebsiteManager";
-import SupabaseTest from "./pages/SupabaseTest";
-import TestTaskManagement from "./pages/TestTaskManagement";
+import FeatureDemo from "./pages/FeatureDemo";
+import Landing from "./pages/Landing";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
 // AppContent component that uses search context
 const AppContent = () => {
-  // const { isSearchOpen, closeSearch } = useSearch();
+  const { isSearchOpen, closeSearch } = useSearch();
+
+  // Preload critical components on app start
+  React.useEffect(() => {
+    preloadCriticalComponents();
+  }, []);
 
   return (
     <>
       <BrowserRouter>
         <div className="min-h-screen">
           <Routes>
-            {/* Public route for joining workspaces */}
+            {/* Public routes */}
+            <Route path="/login" element={<Landing />} />
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/join/:inviteCode" element={<JoinWorkspace />} />
 
-            {/* Protected routes */}
+            {/* Protected routes with Suspense */}
             <Route path="/*" element={
               <ProtectedRoute>
                 <CollaborationOverlay>
-                  <Navbar />
                   <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/tasker" element={<Tasker />} />
-                    <Route path="/websites" element={<WebsiteManager />} />
+                    {/* Main pages with Suspense */}
+                    <Route path="/" element={
+                      <LazyPageWrapper loadingText="Loading dashboard...">
+                        <LazyHome />
+                      </LazyPageWrapper>
+                    } />
+
+                    <Route path="/tasker" element={
+                      <LazyPageWrapper loadingText="Loading task manager...">
+                        <LazyTasker />
+                      </LazyPageWrapper>
+                    } />
+
+                    <Route path="/team" element={
+                      <LazyPageWrapper loadingText="Loading team page...">
+                        <LazyTeam />
+                      </LazyPageWrapper>
+                    } />
+
+                    <Route path="/analytics" element={
+                      <LazyPageWrapper loadingText="Loading analytics...">
+                        <LazyAnalytics />
+                      </LazyPageWrapper>
+                    } />
+
+                    <Route path="/calendar" element={
+                      <LazyPageWrapper loadingText="Loading calendar...">
+                        <LazyCalendar />
+                      </LazyPageWrapper>
+                    } />
+
+                    <Route path="/profile" element={
+                      <LazyPageWrapper loadingText="Loading profile...">
+                        <LazyProfile />
+                      </LazyPageWrapper>
+                    } />
+
+                    <Route path="/settings" element={
+                      <LazyPageWrapper loadingText="Loading settings...">
+                        <LazySettings />
+                      </LazyPageWrapper>
+                    } />
+
+                    <Route path="/workspaces" element={
+                      <LazyPageWrapper loadingText="Loading workspace management...">
+                        <LazyWorkspaceManagement />
+                      </LazyPageWrapper>
+                    } />
+
+                    <Route path="/workspace-management" element={
+                      <LazyPageWrapper loadingText="Loading workspace management...">
+                        <LazyWorkspaceManagement />
+                      </LazyPageWrapper>
+                    } />
+
+                    {/* Websites page with Suspense */}
+                    <Route path="/websites" element={
+                      <LazyPageWrapper loadingText="Loading websites...">
+                        <LazyWebsites />
+                      </LazyPageWrapper>
+                    } />
+
+                    {/* Non-lazy routes (keep for critical path or small components) */}
+                    <Route path="/features" element={<FeatureDemo />} />
                     <Route path="/add-page" element={<AddPage />} />
-                    <Route path="/supabase-test" element={<SupabaseTest />} />
-                    <Route path="/test-tasks" element={<TestTaskManagement />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </CollaborationOverlay>
@@ -60,31 +149,30 @@ const AppContent = () => {
         </div>
       </BrowserRouter>
 
-      {/* Global Search Modal - Temporarily disabled */}
-      {/* <GlobalSearchModal
+      {/* Global Search Modal */}
+      <GlobalSearchModal
         isOpen={isSearchOpen}
         onClose={closeSearch}
         onResultClick={(result) => {
-          console.log('Search result clicked:', result);
           closeSearch();
         }}
-      /> */}
+      />
 
-      {/* Search Command Palette - Temporarily disabled */}
-      {/* <SearchCommandPalette
+      {/* Search Command Palette */}
+      <SearchCommandPalette
         onNavigate={(path) => {
-          console.log('Navigate to:', path);
+          // Handle navigation
         }}
         onCreateTask={() => {
-          console.log('Create task');
+          // Handle task creation
         }}
         onCreatePage={() => {
-          console.log('Create page');
+          // Handle page creation
         }}
         onOpenSettings={() => {
-          console.log('Open settings');
+          // Handle settings
         }}
-      /> */}
+      />
     </>
   );
 };
@@ -93,19 +181,27 @@ const App = () => {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <SupabaseAuthProvider>
-            <SupabaseWorkspaceProvider>
+        <ThemeProvider>
+          <TooltipProvider>
+            <SupabaseAuthProvider>
               <NotificationProvider>
-                <TaskProvider>
-                  <Toaster />
-                  <Sonner />
-                  <AppContent />
-                </TaskProvider>
+                <SupabaseWorkspaceProvider>
+                  <AsyncErrorBoundary>
+                    <TaskProvider>
+                      <AsyncErrorBoundary>
+                        <SearchProvider>
+                          <Toaster />
+                          <Sonner />
+                          <AppContent />
+                        </SearchProvider>
+                      </AsyncErrorBoundary>
+                    </TaskProvider>
+                  </AsyncErrorBoundary>
+                </SupabaseWorkspaceProvider>
               </NotificationProvider>
-            </SupabaseWorkspaceProvider>
-          </SupabaseAuthProvider>
-        </TooltipProvider>
+            </SupabaseAuthProvider>
+          </TooltipProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

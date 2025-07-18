@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,17 +6,20 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Plus, 
-  Trash2, 
-  GitBranch, 
-  ArrowRight, 
+import {
+  Plus,
+  Trash2,
+  GitBranch,
+  ArrowRight,
   AlertTriangle,
   Info,
   CheckCircle,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
 import { TaskDependency, Task } from '../types';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/SupabaseAuthContext';
 
 interface TaskDependencyManagerProps {
   task: Task;
@@ -52,11 +55,53 @@ const TaskDependencyManager: React.FC<TaskDependencyManagerProps> = ({
   allTasks, 
   onUpdateTask 
 }) => {
+  const { user } = useAuth();
   const [isAddingDependency, setIsAddingDependency] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [selectedType, setSelectedType] = useState<keyof typeof DEPENDENCY_TYPES>('finish_to_start');
+  const [loading, setLoading] = useState(false);
+  const [dependencies, setDependencies] = useState<TaskDependency[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  const dependencies = task.dependencies || [];
+  // Load dependencies from database
+  useEffect(() => {
+    loadDependencies();
+  }, [task.id]);
+
+  const loadDependencies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('task_dependencies')
+        .select(`
+          *,
+          depends_on_task:tasks!task_dependencies_depends_on_task_id_fkey(
+            id,
+            title,
+            status
+          )
+        `)
+        .eq('task_id', task.id);
+
+      if (error) {
+        console.error('Error loading dependencies:', error);
+        setError('Failed to load task dependencies');
+        return;
+      }
+
+      const formattedDependencies: TaskDependency[] = data?.map(dep => ({
+        id: dep.id,
+        taskId: dep.task_id,
+        dependsOnTaskId: dep.depends_on_task_id,
+        type: dep.dependency_type as TaskDependency['type'],
+        dependsOnTask: dep.depends_on_task
+      })) || [];
+
+      setDependencies(formattedDependencies);
+    } catch (error) {
+      console.error('Error loading dependencies:', error);
+      setError('Failed to load task dependencies');
+    }
+  };
   
   // Get tasks that depend on this task
   const dependentTasks = allTasks.filter(t => 
@@ -70,28 +115,89 @@ const TaskDependencyManager: React.FC<TaskDependencyManagerProps> = ({
     !dependentTasks.some(dt => dt.id === t.id) // Prevent circular dependencies
   );
 
-  const addDependency = () => {
-    if (!selectedTaskId) return;
+  const addDependency = async () => {
+    if (!selectedTaskId || loading) return;
 
-    const newDependency: TaskDependency = {
-      id: `dep_${Date.now()}`,
-      dependentTaskId: task.id,
-      dependsOnTaskId: selectedTaskId,
-      type: selectedType,
-      createdAt: new Date().toISOString()
-    };
+    try {
+      setLoading(true);
+      setError(null);
 
-    const updatedDependencies = [...dependencies, newDependency];
-    onUpdateTask(task.id, { dependencies: updatedDependencies });
-    
-    setSelectedTaskId('');
-    setSelectedType('finish_to_start');
-    setIsAddingDependency(false);
+      const { data, error } = await supabase
+        .from('task_dependencies')
+        .insert({
+          task_id: task.id,
+          depends_on_task_id: selectedTaskId,
+          dependency_type: selectedType,
+          created_by: user?.id
+        })
+        .select(`
+          *,
+          depends_on_task:tasks!task_dependencies_depends_on_task_id_fkey(
+            id,
+            title,
+            status
+          )
+        `)
+        .single();
+
+      if (error) {
+        if (error.message.includes('Circular dependency')) {
+          setError('Cannot add dependency: This would create a circular dependency');
+        } else {
+          setError('Failed to add dependency');
+        }
+        console.error('Error adding dependency:', error);
+        return;
+      }
+
+      // Add to local state
+      const newDependency: TaskDependency = {
+        id: data.id,
+        dependentTaskId: data.task_id,
+        dependsOnTaskId: data.depends_on_task_id,
+        type: data.dependency_type as TaskDependency['type'],
+        dependsOnTask: data.depends_on_task,
+        createdAt: data.created_at
+      };
+
+      setDependencies(prev => [...prev, newDependency]);
+      setSelectedTaskId('');
+      setSelectedType('finish_to_start');
+      setIsAddingDependency(false);
+
+    } catch (error) {
+      console.error('Error adding dependency:', error);
+      setError('Failed to add dependency');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const removeDependency = (dependencyId: string) => {
-    const updatedDependencies = dependencies.filter(dep => dep.id !== dependencyId);
-    onUpdateTask(task.id, { dependencies: updatedDependencies });
+  const removeDependency = async (dependencyId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { error } = await supabase
+        .from('task_dependencies')
+        .delete()
+        .eq('id', dependencyId);
+
+      if (error) {
+        console.error('Error removing dependency:', error);
+        setError('Failed to remove dependency');
+        return;
+      }
+
+      // Remove from local state
+      setDependencies(prev => prev.filter(dep => dep.id !== dependencyId));
+
+    } catch (error) {
+      console.error('Error removing dependency:', error);
+      setError('Failed to remove dependency');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getDependencyTask = (taskId: string) => {

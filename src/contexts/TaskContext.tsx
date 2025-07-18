@@ -5,6 +5,9 @@ import { useAuth } from './SupabaseAuthContext';
 import { useSupabaseWorkspace } from './SupabaseWorkspaceContext';
 import { supabase } from '../lib/supabase';
 import { toast } from '../components/ui/sonner';
+import { useAsyncOperation } from '../hooks/useAsyncError';
+import { fileUploadService } from '../services/fileUploadService';
+import { notificationService } from '../services/notificationService';
 
 // Database type mappings
 interface SupabaseTask {
@@ -54,8 +57,55 @@ interface TaskContextType {
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
+// Helper function to load attachments for tasks
+const loadTaskAttachments = async (taskIds: string[]): Promise<Record<string, TaskAttachment[]>> => {
+  if (taskIds.length === 0) return {};
+
+  try {
+    const { data, error } = await supabase
+      .from('file_attachments')
+      .select('*')
+      .in('task_id', taskIds);
+
+    if (error) {
+      console.error('Error loading task attachments:', error);
+      return {};
+    }
+
+    // Group attachments by task ID
+    const attachmentsByTask: Record<string, TaskAttachment[]> = {};
+    data?.forEach(attachment => {
+      if (attachment.task_id) {
+        if (!attachmentsByTask[attachment.task_id]) {
+          attachmentsByTask[attachment.task_id] = [];
+        }
+        attachmentsByTask[attachment.task_id].push({
+          id: attachment.id,
+          workspaceId: attachment.workspace_id,
+          taskId: attachment.task_id,
+          commentId: attachment.comment_id,
+          fileName: attachment.file_name,
+          originalName: attachment.original_name,
+          fileSize: attachment.file_size,
+          fileType: attachment.file_type,
+          fileUrl: attachment.file_url,
+          filePath: attachment.file_path,
+          uploadedBy: attachment.uploaded_by,
+          createdAt: attachment.created_at,
+          updatedAt: attachment.updated_at
+        });
+      }
+    });
+
+    return attachmentsByTask;
+  } catch (error) {
+    console.error('Error loading task attachments:', error);
+    return {};
+  }
+};
+
 // Mapping functions between local types and Supabase types
-const mapSupabaseTaskToLocal = (supabaseTask: SupabaseTask, order: number = 0): Task => {
+const mapSupabaseTaskToLocal = (supabaseTask: SupabaseTask, order: number = 0, attachments: TaskAttachment[] = []): Task => {
   return {
     id: supabaseTask.id,
     title: supabaseTask.title,
@@ -64,13 +114,14 @@ const mapSupabaseTaskToLocal = (supabaseTask: SupabaseTask, order: number = 0): 
             supabaseTask.status === 'in_progress' ? 'progress' :
             supabaseTask.status === 'completed' ? 'done' : 'todo', // Handle 'cancelled' as 'todo'
     dueDate: supabaseTask.due_date,
-    priority: supabaseTask.priority === 'urgent' ? 'high' : supabaseTask.priority,
+    priority: supabaseTask.priority, // Keep all priority levels including 'urgent'
     pageId: supabaseTask.page_id,
     order,
     createdAt: supabaseTask.created_at,
     tags: [], // Will be enhanced later with tags table
     link: '', // Will be enhanced later
-    attachedImage: '' // Will be enhanced later
+    attachedImage: '', // Will be enhanced later
+    attachments: attachments
   };
 };
 
@@ -82,7 +133,7 @@ const mapLocalTaskToSupabase = (localTask: Task, workspaceId: string, userId: st
     description: localTask.description,
     status: localTask.status === 'todo' ? 'pending' :
             localTask.status === 'progress' ? 'in_progress' : 'completed',
-    priority: localTask.priority === 'high' ? 'urgent' : (localTask.priority || 'medium') as 'low' | 'medium' | 'high' | 'urgent',
+    priority: (localTask.priority || 'medium') as 'low' | 'medium' | 'high' | 'urgent',
     created_by: userId,
     due_date: localTask.dueDate || null,
     assigned_to: null // Will be enhanced later with assignments
@@ -410,12 +461,17 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (tasksError) throw tasksError;
 
+      // Load attachments for all tasks
+      const taskIds = tasksData?.map(task => task.id) || [];
+      const attachmentsByTask = await loadTaskAttachments(taskIds);
+
       // Group tasks by page
       const tasksByPage: { [pageId: string]: Task[] } = {};
       const unassignedTasks: Task[] = [];
 
       tasksData?.forEach((task, index) => {
-        const localTask = mapSupabaseTaskToLocal(task, index);
+        const taskAttachments = attachmentsByTask[task.id] || [];
+        const localTask = mapSupabaseTaskToLocal(task, index, taskAttachments);
         if (task.page_id) {
           if (!tasksByPage[task.page_id]) {
             tasksByPage[task.page_id] = [];
@@ -466,15 +522,54 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (error) throw error;
 
-      const newTask = mapSupabaseTaskToLocal(data, state.unassignedTasks.length);
+      const newTask = mapSupabaseTaskToLocal(data, state.unassignedTasks.length, []);
+
+      // If there are attachments, link them to the task
+      if (taskData.attachments && taskData.attachments.length > 0) {
+        try {
+          // Update attachments to link them to the new task
+          const { error: attachmentError } = await supabase
+            .from('file_attachments')
+            .update({ task_id: data.id })
+            .in('id', taskData.attachments.map(att => att.id));
+
+          if (attachmentError) {
+            console.error('Error linking attachments:', attachmentError);
+            toast.error('Task created but failed to link attachments');
+          }
+
+          // Add attachments to the new task object
+          newTask.attachments = taskData.attachments;
+        } catch (attachmentError) {
+          console.error('Error linking attachments:', attachmentError);
+          toast.error('Task created but failed to link attachments');
+        }
+      }
+
       dispatch({ type: 'ADD_TASK', payload: newTask });
 
       toast.success('Task created successfully');
     } catch (error) {
       console.error('Error adding task:', error);
-      // Show more specific error message
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create task';
-      toast.error(`Failed to create task: ${errorMessage}`);
+
+      // Provide specific error messages based on error type
+      let errorMessage = 'Failed to create task';
+
+      if (error instanceof Error) {
+        if (error.message.includes('duplicate key')) {
+          errorMessage = 'A task with this title already exists';
+        } else if (error.message.includes('permission denied')) {
+          errorMessage = 'You do not have permission to create tasks in this workspace';
+        } else if (error.message.includes('foreign key')) {
+          errorMessage = 'Invalid workspace or page reference';
+        } else if (error.message.includes('network')) {
+          errorMessage = 'Network error. Please check your connection and try again';
+        } else {
+          errorMessage = `Failed to create task: ${error.message}`;
+        }
+      }
+
+      toast.error(errorMessage);
     }
   };
 
@@ -485,6 +580,16 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     try {
+      // Get current task data for comparison
+      const { data: currentTaskData, error: fetchError } = await supabase
+        .from('tasks')
+        .select('*, assigned_to, status, title')
+        .eq('id', taskId)
+        .eq('workspace_id', currentWorkspace.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
       // Convert local updates to Supabase format
       const supabaseUpdates: Partial<SupabaseTask> = {};
 
@@ -495,10 +600,11 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                                  updates.status === 'progress' ? 'in_progress' : 'completed';
       }
       if (updates.priority !== undefined) {
-        supabaseUpdates.priority = updates.priority === 'high' ? 'urgent' : (updates.priority || 'medium');
+        supabaseUpdates.priority = (updates.priority || 'medium') as 'low' | 'medium' | 'high' | 'urgent';
       }
       if (updates.dueDate !== undefined) supabaseUpdates.due_date = updates.dueDate;
       if (updates.pageId !== undefined) supabaseUpdates.page_id = updates.pageId;
+      if (updates.assignedTo !== undefined) supabaseUpdates.assigned_to = updates.assignedTo;
 
       const { error } = await supabase
         .from('tasks')
@@ -507,6 +613,58 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .eq('workspace_id', currentWorkspace.id);
 
       if (error) throw error;
+
+      // Send notifications for relevant changes
+      const oldStatus = currentTaskData.status;
+      const newStatus = supabaseUpdates.status;
+      const oldAssignedTo = currentTaskData.assigned_to;
+      const newAssignedTo = supabaseUpdates.assigned_to;
+
+      // Task assignment notification
+      if (newAssignedTo && newAssignedTo !== oldAssignedTo) {
+        // Get assignee user data
+        const { data: assigneeData } = await supabase
+          .from('auth.users')
+          .select('email, raw_user_meta_data')
+          .eq('id', newAssignedTo)
+          .single();
+
+        if (assigneeData?.email) {
+          await notificationService.sendTaskAssignment({
+            taskId,
+            taskTitle: currentTaskData.title,
+            taskDescription: updates.description || currentTaskData.description,
+            assigneeUserId: newAssignedTo,
+            assigneeEmail: assigneeData.email,
+            assignerUserId: user.id,
+            assignerName: user.user_metadata?.full_name || user.email || 'Unknown User',
+            workspaceId: currentWorkspace.id,
+            workspaceName: currentWorkspace.name,
+            dueDate: updates.dueDate || currentTaskData.due_date,
+            priority: updates.priority || currentTaskData.priority
+          });
+        }
+      }
+
+      // Task status change notification
+      if (newStatus && newStatus !== oldStatus) {
+        // Get all relevant users to notify (assignee, creator, watchers)
+        const usersToNotify = [currentTaskData.created_by];
+        if (currentTaskData.assigned_to && !usersToNotify.includes(currentTaskData.assigned_to)) {
+          usersToNotify.push(currentTaskData.assigned_to);
+        }
+
+        await notificationService.sendTaskStatusChange({
+          taskId,
+          taskTitle: currentTaskData.title,
+          oldStatus,
+          newStatus,
+          updaterUserId: user.id,
+          updaterName: user.user_metadata?.full_name || user.email || 'Unknown User',
+          workspaceId: currentWorkspace.id,
+          notifyUserIds: usersToNotify
+        });
+      }
 
       dispatch({ type: 'UPDATE_TASK', payload: { taskId, updates } });
       toast.success('Task updated successfully');
@@ -622,9 +780,27 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       toast.success('Page created successfully');
     } catch (error) {
       console.error('Error adding page:', error);
-      // Show more specific error message
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create page';
-      toast.error(`Failed to create page: ${errorMessage}`);
+
+      // Provide specific error messages based on error type
+      let errorMessage = 'Failed to create page';
+
+      if (error instanceof Error) {
+        if (error.message.includes('duplicate key')) {
+          errorMessage = 'A page with this title already exists in this workspace';
+        } else if (error.message.includes('permission denied')) {
+          errorMessage = 'You do not have permission to create pages in this workspace';
+        } else if (error.message.includes('foreign key')) {
+          errorMessage = 'Invalid workspace reference';
+        } else if (error.message.includes('network')) {
+          errorMessage = 'Network error. Please check your connection and try again';
+        } else if (error.message.includes('title')) {
+          errorMessage = 'Page title is required and cannot be empty';
+        } else {
+          errorMessage = `Failed to create page: ${error.message}`;
+        }
+      }
+
+      toast.error(errorMessage);
     }
   };
 
@@ -774,12 +950,36 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const searchTasks = (query: string): Task[] => {
     if (!query.trim()) return state.unassignedTasks;
-    
+
     const lowerQuery = query.toLowerCase();
-    return state.unassignedTasks.filter(task =>
+
+    // Search in unassigned tasks
+    const unassignedMatches = state.unassignedTasks.filter(task =>
       task.title.toLowerCase().includes(lowerQuery) ||
-      task.description.toLowerCase().includes(lowerQuery)
+      task.description.toLowerCase().includes(lowerQuery) ||
+      task.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
     );
+
+    // Search in all page tasks
+    const pageTaskMatches: Task[] = [];
+    state.pages.forEach(page => {
+      if (page.tasks) {
+        const matches = page.tasks.filter(task =>
+          task.title.toLowerCase().includes(lowerQuery) ||
+          task.description.toLowerCase().includes(lowerQuery) ||
+          task.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
+        );
+        pageTaskMatches.push(...matches);
+      }
+    });
+
+    // Combine and deduplicate results
+    const allMatches = [...unassignedMatches, ...pageTaskMatches];
+    const uniqueMatches = allMatches.filter((task, index, array) =>
+      array.findIndex(t => t.id === task.id) === index
+    );
+
+    return uniqueMatches;
   };
 
   return (

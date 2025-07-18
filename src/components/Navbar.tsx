@@ -7,15 +7,17 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/SupabaseAuthContext';
 import { useWorkspace } from '../contexts/SupabaseWorkspaceContext';
+import { useSearch } from '../contexts/SearchContext';
 import WorkspaceSelector from './WorkspaceSelector';
 import NotificationCenter from './NotificationCenter';
-import { LogOut, User, Users, ChevronDown } from 'lucide-react';
+import { LogOut, User, Users, ChevronDown, Search, Command } from 'lucide-react';
 
 const Navbar: React.FC = () => {
   const location = useLocation();
   const { state } = useTask();
   const { user, signOut } = useAuth();
   const { currentWorkspace, userWorkspaces } = useWorkspace();
+  const { openSearch } = useSearch();
   const [showWorkspaceSelector, setShowWorkspaceSelector] = useState(false);
 
   const navItems = [
@@ -35,6 +37,20 @@ const Navbar: React.FC = () => {
           </div>
           
           <div className="flex items-center space-x-4">
+            {/* Search Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openSearch}
+              className="flex items-center gap-2"
+            >
+              <Search className="w-4 h-4" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd className="hidden sm:inline-flex pointer-events-none h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </Button>
+
             {/* Workspace Selector */}
             <Popover open={showWorkspaceSelector} onOpenChange={setShowWorkspaceSelector}>
               <PopoverTrigger asChild>

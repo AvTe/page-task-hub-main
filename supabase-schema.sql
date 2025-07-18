@@ -146,3 +146,28 @@ CREATE TABLE user_presence (
   current_page_id UUID REFERENCES pages(id) ON DELETE SET NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- =====================================================
+-- 9. FILE ATTACHMENTS TABLE
+-- =====================================================
+CREATE TABLE file_attachments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
+  comment_id UUID, -- For future comment attachments
+  file_name VARCHAR(255) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  file_size BIGINT NOT NULL,
+  file_type VARCHAR(100) NOT NULL,
+  file_url TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  uploaded_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for file attachments
+CREATE INDEX idx_file_attachments_workspace_id ON file_attachments(workspace_id);
+CREATE INDEX idx_file_attachments_task_id ON file_attachments(task_id);
+CREATE INDEX idx_file_attachments_uploaded_by ON file_attachments(uploaded_by);
+CREATE INDEX idx_file_attachments_created_at ON file_attachments(created_at);

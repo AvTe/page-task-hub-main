@@ -10,6 +10,7 @@ export interface Workspace {
   settings: WorkspaceSettings;
   createdAt: string;
   updatedAt: string;
+  memberCount?: number; // Optional member count for display
 }
 
 export interface WorkspaceMember {
@@ -22,6 +23,9 @@ export interface WorkspaceMember {
   lastActive: string;
   permissions: Permission[];
   isOnline: boolean;
+  jobTitle?: string;
+  department?: string;
+  fullName?: string;
 }
 
 export type UserRole = 'owner' | 'admin' | 'member' | 'guest';
@@ -55,7 +59,7 @@ export interface CollaborativeTask {
   description: string;
   status: 'todo' | 'progress' | 'done';
   dueDate?: string;
-  priority: 'low' | 'medium' | 'high';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   assigneeId?: string;
   assignedBy?: string;
   createdBy: string;

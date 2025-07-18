@@ -5,7 +5,7 @@ export interface Task {
   description: string;
   status: 'todo' | 'progress' | 'done';
   dueDate?: string;
-  priority?: 'low' | 'medium' | 'high';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   link?: string;
   tags?: string[];
   attachedImage?: string;
@@ -49,12 +49,18 @@ export interface TaskDependency {
 
 export interface TaskAttachment {
   id: string;
-  name: string;
-  url: string;
-  type: 'image' | 'document' | 'link' | 'video';
-  size?: number;
+  workspaceId: string;
+  taskId?: string;
+  commentId?: string;
+  fileName: string;
+  originalName: string;
+  fileSize: number;
+  fileType: string;
+  fileUrl: string;
+  filePath: string;
   uploadedBy: string;
-  uploadedAt: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TaskComment {
@@ -99,6 +105,13 @@ export const TASK_STATUSES = {
   done: { label: 'Done', color: 'bg-task-done', textColor: 'text-green-700' }
 } as const;
 
+export const TASK_PRIORITIES = {
+  low: { label: 'Low', color: 'bg-gray-100', textColor: 'text-gray-700' },
+  medium: { label: 'Medium', color: 'bg-blue-100', textColor: 'text-blue-700' },
+  high: { label: 'High', color: 'bg-orange-100', textColor: 'text-orange-700' },
+  urgent: { label: 'Urgent', color: 'bg-red-100', textColor: 'text-red-700' }
+} as const;
+
 export const PAGE_COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', 
   '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA'
@@ -115,7 +128,7 @@ export interface TaskTemplate {
   name: string;
   description: string;
   category: string;
-  priority: 'low' | 'medium' | 'high';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   estimatedHours?: number;
   tags: string[];
   subtasks: Array<{

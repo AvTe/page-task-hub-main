@@ -305,3 +305,39 @@ CREATE POLICY "Users can view workspace user presence" ON user_presence
 -- Users can update their own presence
 CREATE POLICY "Users can update their presence" ON user_presence
   FOR ALL USING (user_id = auth.uid());
+
+-- =====================================================
+-- FILE ATTACHMENTS POLICIES
+-- =====================================================
+
+-- Enable RLS on file attachments
+ALTER TABLE file_attachments ENABLE ROW LEVEL SECURITY;
+
+-- Users can view file attachments in workspaces they have access to
+CREATE POLICY "Users can view file attachments in their workspaces" ON file_attachments
+  FOR SELECT USING (
+    workspace_id IN (
+      SELECT id FROM workspaces WHERE owner_id = auth.uid()
+      UNION
+      SELECT workspace_id FROM workspace_members WHERE user_id = auth.uid()
+    )
+  );
+
+-- Users can upload file attachments to workspaces they have access to
+CREATE POLICY "Users can upload file attachments to their workspaces" ON file_attachments
+  FOR INSERT WITH CHECK (
+    workspace_id IN (
+      SELECT id FROM workspaces WHERE owner_id = auth.uid()
+      UNION
+      SELECT workspace_id FROM workspace_members WHERE user_id = auth.uid()
+    ) AND uploaded_by = auth.uid()
+  );
+
+-- Users can delete their own file attachments or workspace owners can delete any
+CREATE POLICY "Users can delete file attachments" ON file_attachments
+  FOR DELETE USING (
+    uploaded_by = auth.uid() OR
+    workspace_id IN (
+      SELECT id FROM workspaces WHERE owner_id = auth.uid()
+    )
+  );

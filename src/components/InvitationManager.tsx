@@ -17,8 +17,8 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../contexts/SupabaseAuthContext';
-import { useSupabaseWorkspace } from '../contexts/SupabaseWorkspaceContext';
 import { supabase } from '../lib/supabase';
+import { notificationService } from '../services/notificationService';
 
 interface WorkspaceInvitation {
   id: string;
@@ -39,36 +39,50 @@ const InvitationManager: React.FC = () => {
   const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
   
   const { user } = useAuth();
-  const { loadUserWorkspaces } = useSupabaseWorkspace();
 
   // Load pending invitations for current user
   const loadInvitations = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('InvitationManager: No user found');
+      return;
+    }
 
     try {
       setLoading(true);
+      console.log('InvitationManager: Loading invitations for user:', user.email);
 
       const { data, error } = await supabase
         .from('workspace_invitations')
-        .select(`
-          *,
-          profiles!workspace_invitations_invited_by_fkey(full_name)
-        `)
+        .select('*')
         .eq('invited_email', user.email)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('InvitationManager: Database error:', error);
+        throw error;
+      }
 
-      // Add inviter name to invitations
+      console.log('InvitationManager: Raw data from database:', data);
+
+      // Map the data to match the interface
       const invitationsWithNames = data?.map(inv => ({
-        ...inv,
-        inviter_name: inv.profiles?.full_name || 'Unknown User'
+        id: inv.id,
+        workspace_id: inv.workspace_id,
+        workspace_name: inv.workspace_name,
+        invited_by: inv.invited_by,
+        invited_email: inv.invited_email,
+        role: inv.role,
+        status: inv.status,
+        created_at: inv.created_at,
+        expires_at: inv.expires_at,
+        inviter_name: inv.invited_by_name
       })) || [];
 
+      console.log('InvitationManager: Processed invitations:', invitationsWithNames);
       setInvitations(invitationsWithNames);
     } catch (error) {
-      console.error('Error loading invitations:', error);
+      console.error('InvitationManager: Error loading invitations:', error);
       toast.error('Failed to load invitations');
     } finally {
       setLoading(false);
@@ -77,28 +91,61 @@ const InvitationManager: React.FC = () => {
 
   // Accept invitation
   const acceptInvitation = async (invitation: WorkspaceInvitation) => {
-    if (!user) return;
+    if (!user) {
+      toast.error('You must be logged in to accept invitations');
+      return;
+    }
 
     try {
       setProcessingInvitation(invitation.id);
-
-      // Call the accept_workspace_invitation function
-      const { error } = await supabase.rpc('accept_workspace_invitation', {
-        invitation_id: invitation.id,
-        user_id: user.id
+      console.log('Accepting invitation:', {
+        invitationId: invitation.id,
+        userId: user.id,
+        userEmail: user.email,
+        invitedEmail: invitation.invited_email
       });
 
-      if (error) throw error;
+      // Check if the user email matches the invitation email
+      if (user.email !== invitation.invited_email) {
+        throw new Error(`This invitation is for ${invitation.invited_email}, but you are logged in as ${user.email}`);
+      }
+
+      // Call the fixed accept_workspace_invitation function
+      console.log('Calling accept_workspace_invitation function...');
+
+      const { data, error } = await supabase.rpc('accept_workspace_invitation', {
+        invitation_id: invitation.id,
+        accepting_user_id: user.id
+      });
+
+      console.log('Function response:', { data, error });
+
+      if (error) {
+        console.error('Database function error:', error);
+        throw new Error(error.message || 'Database function failed');
+      }
+
+      // Check if the function returned false (invitation not found/invalid)
+      if (data === false) {
+        throw new Error('Invitation not found, expired, or already used');
+      }
+
+      console.log('Invitation accepted successfully via database function');
 
       toast.success(`Successfully joined ${invitation.workspace_name}!`);
-      
-      // Reload invitations and workspaces
+
+      // Reload invitations and refresh the page to show new workspace
       await loadInvitations();
-      await loadUserWorkspaces();
-      
+
+      // Refresh the page to reload workspaces
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+
     } catch (error) {
       console.error('Error accepting invitation:', error);
-      toast.error('Failed to accept invitation');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to accept invitation: ${errorMessage}`);
     } finally {
       setProcessingInvitation(null);
     }
@@ -106,19 +153,22 @@ const InvitationManager: React.FC = () => {
 
   // Decline invitation
   const declineInvitation = async (invitation: WorkspaceInvitation) => {
+    if (!user) return;
+
     try {
       setProcessingInvitation(invitation.id);
 
-      const { error } = await supabase
-        .from('workspace_invitations')
-        .update({ status: 'declined' })
-        .eq('id', invitation.id);
+      // Call the decline_workspace_invitation function
+      const { error } = await supabase.rpc('decline_workspace_invitation', {
+        invitation_id: invitation.id,
+        declining_user_id: user.id
+      });
 
       if (error) throw error;
 
       toast.success('Invitation declined');
       await loadInvitations();
-      
+
     } catch (error) {
       console.error('Error declining invitation:', error);
       toast.error('Failed to decline invitation');

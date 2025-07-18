@@ -8,7 +8,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Bell, Check, CheckCheck, Trash2, Settings, User, MessageSquare, CheckSquare, UserPlus, Mail } from 'lucide-react';
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Trash2,
+  Settings,
+  User,
+  MessageSquare,
+  CheckSquare,
+  UserPlus,
+  Mail,
+  Archive,
+  X,
+  Filter
+} from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNotifications, Notification } from '../contexts/NotificationContext';
 
@@ -23,6 +37,7 @@ const NotificationCenter: React.FC = () => {
   } = useNotifications();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
 
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
@@ -43,16 +58,31 @@ const NotificationCenter: React.FC = () => {
     }
   };
 
+  // Filter notifications based on current filter
+  const filteredNotifications = notifications.filter(notification => {
+    if (filter === 'unread') return !notification.read;
+    if (filter === 'read') return notification.read;
+    return true; // 'all'
+  });
+
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.read) {
       await markAsRead(notification.id);
     }
-
     if (notification.action_url) {
       window.location.href = notification.action_url;
     }
-
     setIsOpen(false);
+  };
+
+  const handleMarkAllAsRead = async () => {
+    await markAllAsRead();
+    setIsOpen(false);
+  };
+
+  const handleArchiveNotification = async (notificationId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    await deleteNotification(notificationId);
   };
 
 
@@ -73,40 +103,67 @@ const NotificationCenter: React.FC = () => {
         </Button>
       </PopoverTrigger>
       
-      <PopoverContent className="w-80 p-0" align="end">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-semibold">Notifications</h3>
-          <div className="flex items-center gap-2">
-            {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={markAllAsRead}
-                className="text-xs"
-              >
-                <CheckCheck className="h-3 w-3 mr-1" />
-                Mark all read
-              </Button>
-            )}
+      <PopoverContent className="w-96 p-0" align="end">
+        <div className="p-4 border-b space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-lg">Notifications</h3>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleMarkAllAsRead}
+                  className="text-xs"
+                >
+                  <CheckCheck className="h-3 w-3 mr-1" />
+                  Mark all read
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <Button
-              variant="ghost"
+              variant={filter === 'all' ? 'default' : 'ghost'}
               size="sm"
-              onClick={() => {/* Open notification settings */}}
+              onClick={() => setFilter('all')}
+              className="text-xs h-7 px-3"
             >
-              <Settings className="h-4 w-4" />
+              All ({notifications.length})
+            </Button>
+            <Button
+              variant={filter === 'unread' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setFilter('unread')}
+              className="text-xs h-7 px-3"
+            >
+              Unread ({unreadCount})
+            </Button>
+            <Button
+              variant={filter === 'read' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setFilter('read')}
+              className="text-xs h-7 px-3"
+            >
+              Read ({notifications.length - unreadCount})
             </Button>
           </div>
         </div>
 
         <ScrollArea className="h-96">
-          {notifications.length === 0 ? (
+          {filteredNotifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Bell className="h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">No notifications</p>
+              <p className="text-sm text-muted-foreground">
+                {filter === 'unread' ? 'No unread notifications' :
+                 filter === 'read' ? 'No read notifications' :
+                 'No notifications'}
+              </p>
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((notification) => (
+              {filteredNotifications.map((notification) => (
                 <div
                   key={notification.id}
                   className={`p-4 hover:bg-muted/50 cursor-pointer transition-colors ${
@@ -141,16 +198,14 @@ const NotificationCenter: React.FC = () => {
                           {!notification.read && (
                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                           )}
+
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteNotification(notification.id);
-                            }}
-                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                            onClick={(e) => handleArchiveNotification(notification.id, e)}
+                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Archive className="h-3 w-3" />
                           </Button>
                         </div>
                       </div>
