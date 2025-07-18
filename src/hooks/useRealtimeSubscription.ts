@@ -1,7 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/SupabaseAuthContext';
+import { QUERY_KEYS, invalidateQueries } from '../lib/queryClient';
+import { useCacheService } from './useCacheService';
+import { QueryClient } from '@tanstack/react-query';
+import { CacheService } from '../services/cacheService';
 
 interface RealtimeSubscriptionOptions {
   table: string;
@@ -12,6 +17,192 @@ interface RealtimeSubscriptionOptions {
   enabled?: boolean;
 }
 
+// Handle cache invalidation based on real-time events
+const handleCacheInvalidation = (
+  table: string,
+  payload: any,
+  queryClient: QueryClient,
+  cacheService: CacheService
+) => {
+  const { eventType, new: newRecord, old: oldRecord } = payload;
+
+  switch (table) {
+    case 'tasks':
+      if (newRecord?.id) {
+        // Invalidate specific task
+        cacheService.invalidateTaskCache(newRecord.id);
+
+        // Invalidate workspace tasks
+        if (newRecord.workspace_id) {
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.WORKSPACE_TASKS(newRecord.workspace_id)
+          });
+        }
+
+        // Invalidate page tasks
+        if (newRecord.page_id) {
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.PAGE_TASKS(newRecord.page_id)
+          });
+        }
+
+        // Invalidate user stats
+        if (newRecord.created_by) {
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.USER_STATS(newRecord.created_by)
+          });
+        }
+      }
+
+      // Handle deletions
+      if (eventType === 'DELETE' && oldRecord?.id) {
+        cacheService.invalidateTaskCache(oldRecord.id);
+        if (oldRecord.workspace_id) {
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.WORKSPACE_TASKS(oldRecord.workspace_id)
+          });
+        }
+      }
+      break;
+
+    case 'pages':
+      if (newRecord?.id) {
+        // Invalidate specific page
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.PAGE(newRecord.id)
+        });
+
+        // Invalidate workspace pages
+        if (newRecord.workspace_id) {
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.WORKSPACE_PAGES(newRecord.workspace_id)
+          });
+        }
+      }
+
+      if (eventType === 'DELETE' && oldRecord?.id) {
+        queryClient.removeQueries({
+          queryKey: QUERY_KEYS.PAGE(oldRecord.id)
+        });
+        if (oldRecord.workspace_id) {
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.WORKSPACE_PAGES(oldRecord.workspace_id)
+          });
+        }
+      }
+      break;
+
+    case 'workspaces':
+      if (newRecord?.id) {
+        // Invalidate specific workspace
+        cacheService.invalidateWorkspaceCache(newRecord.id);
+
+        // Invalidate user workspaces
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.WORKSPACES
+        });
+      }
+
+      if (eventType === 'DELETE' && oldRecord?.id) {
+        queryClient.removeQueries({
+          queryKey: QUERY_KEYS.WORKSPACE(oldRecord.id)
+        });
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.WORKSPACES
+        });
+      }
+      break;
+
+    case 'workspace_members':
+      if (newRecord?.workspace_id) {
+        // Invalidate workspace members
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.WORKSPACE_MEMBERS(newRecord.workspace_id)
+        });
+
+        // Invalidate user workspaces if user was added/removed
+        if (newRecord.user_id) {
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.WORKSPACES
+          });
+        }
+      }
+      break;
+
+    case 'task_comments':
+      if (newRecord?.task_id) {
+        // Invalidate task comments
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.TASK_COMMENTS(newRecord.task_id)
+        });
+
+        // Update task cache to reflect new comment count
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.TASK(newRecord.task_id)
+        });
+      }
+      break;
+
+    case 'subtasks':
+      if (newRecord?.task_id) {
+        // Invalidate task subtasks
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.TASK_SUBTASKS(newRecord.task_id)
+        });
+
+        // Update task cache
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.TASK(newRecord.task_id)
+        });
+      }
+      break;
+
+    case 'task_dependencies':
+      if (newRecord?.task_id) {
+        // Invalidate task dependencies
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.TASK_DEPENDENCIES(newRecord.task_id)
+        });
+      }
+      break;
+
+    case 'task_time_entries':
+      if (newRecord?.task_id) {
+        // Invalidate task time entries
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.TASK_TIME_ENTRIES(newRecord.task_id)
+        });
+
+        // Invalidate user stats
+        if (newRecord.user_id) {
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.USER_STATS(newRecord.user_id)
+          });
+        }
+      }
+      break;
+
+    case 'users':
+      if (newRecord?.id) {
+        // Invalidate user profile
+        cacheService.invalidateUserCache(newRecord.id);
+      }
+      break;
+
+    case 'user_settings':
+      if (newRecord?.user_id) {
+        // Invalidate user settings
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.USER_SETTINGS(newRecord.user_id)
+        });
+      }
+      break;
+
+    default:
+      console.log(`No cache invalidation handler for table: ${table}`);
+  }
+};
+
 export const useRealtimeSubscription = ({
   table,
   filter,
@@ -21,6 +212,8 @@ export const useRealtimeSubscription = ({
   enabled = true
 }: RealtimeSubscriptionOptions) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const cacheService = useCacheService();
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
@@ -42,7 +235,10 @@ export const useRealtimeSubscription = ({
         },
         (payload) => {
           console.log(`Realtime ${payload.eventType} on ${table}:`, payload);
-          
+
+          // Handle cache invalidation based on table and event type
+          handleCacheInvalidation(table, payload, queryClient, cacheService);
+
           switch (payload.eventType) {
             case 'INSERT':
               onInsert?.(payload);
@@ -84,12 +280,18 @@ export const useTaskRealtime = (
   onCommentUpdate?: (comment: any) => void
 ) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const cacheService = useCacheService();
 
   // Task updates
   const taskSubscription = useRealtimeSubscription({
     table: 'tasks',
     filter: `id=eq.${taskId}`,
     onUpdate: (payload) => {
+      // Update the specific task in cache
+      if (payload.new) {
+        queryClient.setQueryData(QUERY_KEYS.TASK(taskId), payload.new);
+      }
       onTaskUpdate?.(payload.new);
     },
     enabled: !!taskId && !!user
@@ -141,15 +343,25 @@ export const useWorkspaceRealtime = (
   onMemberUpdate?: (member: any) => void
 ) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const cacheService = useCacheService();
 
   // Task updates in workspace
   const taskSubscription = useRealtimeSubscription({
     table: 'tasks',
     filter: `workspace_id=eq.${workspaceId}`,
     onInsert: (payload) => {
+      // Add new task to workspace tasks cache
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.WORKSPACE_TASKS(workspaceId)
+      });
       onTaskUpdate?.(payload.new);
     },
     onUpdate: (payload) => {
+      // Update task in cache
+      if (payload.new?.id) {
+        queryClient.setQueryData(QUERY_KEYS.TASK(payload.new.id), payload.new);
+      }
       onTaskUpdate?.(payload.new);
     },
     onDelete: (payload) => {

@@ -4,6 +4,11 @@ import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/SupabaseAuthContext';
 import { useSupabaseWorkspace } from '../contexts/SupabaseWorkspaceContext';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useUserStats } from '../hooks/useUserQueries';
+import { useWorkspaceTasks } from '../hooks/useTaskQueries';
+import { useWorkspacePages } from '../hooks/usePageQueries';
+import { useCacheWarmup, useBrowserCachePreload, useAutoBrowserCacheCleanup } from '../hooks/useCacheService';
+import { supabase } from '../lib/supabase';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +56,16 @@ const Home: React.FC = () => {
   const { notifications } = useNotifications();
   const navigate = useNavigate();
 
+  // Use caching hooks for better performance
+  const { data: userStats, isLoading: statsLoading } = useUserStats();
+  const { data: workspaceTasks, isLoading: tasksLoading } = useWorkspaceTasks(currentWorkspace?.id || '');
+  const { data: workspacePages, isLoading: pagesLoading } = useWorkspacePages(currentWorkspace?.id || '');
+
+  // Initialize caching
+  useCacheWarmup();
+  useBrowserCachePreload();
+  useAutoBrowserCacheCleanup();
+
   // Check if database setup is needed
   const needsDatabaseSetup = notifications.some(n => n.data?.demo && n.data?.action === 'setup_database');
 
@@ -68,26 +83,37 @@ const Home: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Calculate task statistics
-  const totalTasks = state.pages.reduce((total, page) => total + page.tasks.length, 0) + state.unassignedTasks.length;
-  const completedTasks = state.pages.reduce((total, page) =>
+  // Overall loading state considering cached data
+  const isLoading = loading || statsLoading || (currentWorkspace && (tasksLoading || pagesLoading));
+
+  // Calculate task statistics using cached data when available
+  const totalTasks = userStats?.totalTasks || state.pages.reduce((total, page) => total + page.tasks.length, 0) + state.unassignedTasks.length;
+  const completedTasks = userStats?.completedTasks || state.pages.reduce((total, page) =>
     total + page.tasks.filter(task => task.status === 'done').length, 0
   ) + state.unassignedTasks.filter(task => task.status === 'done').length;
-  const inProgressTasks = state.pages.reduce((total, page) =>
+  const inProgressTasks = userStats?.inProgressTasks || state.pages.reduce((total, page) =>
     total + page.tasks.filter(task => task.status === 'in-progress').length, 0
   ) + state.unassignedTasks.filter(task => task.status === 'in-progress').length;
   const todoTasks = totalTasks - completedTasks - inProgressTasks;
   const progressPercentage = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
-  // Get recent tasks (last 5)
-  const recentTasks = state.pages
-    .flatMap(page => page.tasks.map(task => ({ ...task, pageName: page.title })))
-    .concat(state.unassignedTasks.map(task => ({ ...task, pageName: 'Unassigned' })))
-    .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime())
-    .slice(0, 5);
+  // Get recent tasks (last 5) - prefer cached data
+  const recentTasks = workspaceTasks
+    ? workspaceTasks
+        .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
+        .slice(0, 5)
+        .map(task => ({
+          ...task,
+          pageName: workspacePages?.find(page => page.id === task.page_id)?.title || 'Unassigned'
+        }))
+    : state.pages
+        .flatMap(page => page.tasks.map(task => ({ ...task, pageName: page.title })))
+        .concat(state.unassignedTasks.map(task => ({ ...task, pageName: 'Unassigned' })))
+        .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime())
+        .slice(0, 5);
 
-  // Get recent websites (last 3)
-  const recentWebsites = state.pages.slice(0, 3);
+  // Get recent websites (last 3) - prefer cached data
+  const recentWebsites = workspacePages?.slice(0, 3) || state.pages.slice(0, 3);
 
   // Load advanced features data
   useEffect(() => {

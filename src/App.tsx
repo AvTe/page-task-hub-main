@@ -4,7 +4,10 @@ import React, { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createQueryClient } from "./lib/queryClient";
+import { createCacheMonitoringService } from "./services/cacheMonitoringService";
+import CacheDebugPanel from "./components/CacheDebugPanel";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { SupabaseAuthProvider } from "./contexts/SupabaseAuthContext";
@@ -48,7 +51,11 @@ import Landing from "./pages/Landing";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Create query client with advanced caching configuration
+const queryClient = createQueryClient();
+
+// Initialize cache monitoring service
+createCacheMonitoringService(queryClient);
 
 // AppContent component that uses search context
 const AppContent = () => {
@@ -193,6 +200,8 @@ const App = () => {
                           <Toaster />
                           <Sonner />
                           <AppContent />
+                          {/* Cache Debug Panel - only in development */}
+                          {import.meta.env.DEV && <CacheDebugPanel />}
                         </SearchProvider>
                       </AsyncErrorBoundary>
                     </TaskProvider>

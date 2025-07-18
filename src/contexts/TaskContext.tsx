@@ -8,6 +8,8 @@ import { toast } from '../components/ui/sonner';
 import { useAsyncOperation } from '../hooks/useAsyncError';
 import { fileUploadService } from '../services/fileUploadService';
 import { notificationService } from '../services/notificationService';
+import { useQueryClient } from '@tanstack/react-query';
+import { QUERY_KEYS, invalidateQueries } from '../lib/queryClient';
 
 // Database type mappings
 interface SupabaseTask {
@@ -388,6 +390,7 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [state, dispatch] = useReducer(taskReducer, { pages: [], unassignedTasks: [], loading: false });
   const { user } = useAuth();
   const { currentWorkspace } = useSupabaseWorkspace();
+  const queryClient = useQueryClient();
 
   // Load workspace data when user and workspace are available
   useEffect(() => {
@@ -548,6 +551,13 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       dispatch({ type: 'ADD_TASK', payload: newTask });
 
+      // Invalidate relevant caches
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKSPACE_TASKS(currentWorkspace.id) });
+      if (newTask.pageId) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PAGE_TASKS(newTask.pageId) });
+      }
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_STATS(user.id) });
+
       toast.success('Task created successfully');
     } catch (error) {
       console.error('Error adding task:', error);
@@ -667,6 +677,15 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       dispatch({ type: 'UPDATE_TASK', payload: { taskId, updates } });
+
+      // Invalidate relevant caches
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.TASK(taskId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKSPACE_TASKS(currentWorkspace.id) });
+      if (updates.pageId) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.PAGE_TASKS(updates.pageId) });
+      }
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_STATS(user.id) });
+
       toast.success('Task updated successfully');
     } catch (error) {
       console.error('Error updating task:', error);
@@ -690,6 +709,12 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) throw error;
 
       dispatch({ type: 'DELETE_TASK', payload: taskId });
+
+      // Invalidate relevant caches
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.TASK(taskId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKSPACE_TASKS(currentWorkspace.id) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_STATS(user.id) });
+
       toast.success('Task deleted successfully');
     } catch (error) {
       console.error('Error deleting task:', error);

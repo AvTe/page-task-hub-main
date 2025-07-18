@@ -30,21 +30,31 @@ import ModernLayout from '../components/ModernLayout';
 import TaskViews from '../components/TaskViews';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useUserStats } from '../hooks/useUserQueries';
+import { useWorkspaceTasks } from '../hooks/useTaskQueries';
+import { useWorkspacePages } from '../hooks/usePageQueries';
+import { useSupabaseWorkspace } from '../contexts/SupabaseWorkspaceContext';
 
 const Tasker: React.FC = () => {
   const { state, moveTask, searchTasks, updateTask } = useTask();
   const { user } = useAuth();
+  const { currentWorkspace } = useSupabaseWorkspace();
+
+  // Use caching hooks for better performance
+  const { data: userStats, isLoading: statsLoading } = useUserStats();
+  const { data: workspaceTasks, isLoading: tasksLoading } = useWorkspaceTasks(currentWorkspace?.id || '');
+  const { data: workspacePages, isLoading: pagesLoading } = useWorkspacePages(currentWorkspace?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddPageModal, setShowAddPageModal] = useState(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [showTaskDetails, setShowTaskDetails] = useState(false);
   const [advancedStats, setAdvancedStats] = useState({
-    totalTimeTracked: 0,
-    activeTimers: 0,
-    totalComments: 0,
+    totalTimeTracked: userStats?.totalTimeTracked || 0,
+    activeTimers: userStats?.activeTimers || 0,
+    totalComments: userStats?.totalComments || 0,
     totalDependencies: 0,
-    totalSubtasks: 0,
+    totalSubtasks: userStats?.totalSubtasks || 0,
     databaseSetup: false
   });
 
