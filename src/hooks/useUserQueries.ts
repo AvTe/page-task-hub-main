@@ -73,14 +73,18 @@ interface UserActivity {
 }
 
 // Fetch user profile
-const fetchUserProfile = async (userId: string): Promise<UserProfile> => {
+const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
   const { data, error } = await supabase
-    .from('users')
+    .from('user_profiles')
     .select('*')
-    .eq('id', userId)
+    .eq('user_id', userId)
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (error.code === 'PGRST116') return null; // No profile found
+    console.warn('Error fetching user profile:', error);
+    return null;
+  }
   return data;
 };
 
@@ -153,7 +157,7 @@ const fetchUserStats = async (userId: string): Promise<UserStats> => {
   const now = new Date();
   const completedTasks = tasks.filter(task => task.status === 'done').length;
   const inProgressTasks = tasks.filter(task => task.status === 'in_progress').length;
-  const overdueTasks = tasks.filter(task => 
+  const overdueTasks = tasks.filter(task =>
     task.due_date && new Date(task.due_date) < now && task.status !== 'done'
   ).length;
 
@@ -239,15 +243,35 @@ export const useUpdateUserProfile = () => {
 
   return useMutation({
     mutationFn: async (updates: Partial<UserProfile>) => {
-      const { data, error } = await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', user!.id)
-        .select()
+      // First check if profile exists
+      const { data: existing } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('user_id', user!.id)
         .single();
 
-      if (error) throw error;
-      return data;
+      if (existing) {
+        // Update existing profile
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('user_id', user!.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      } else {
+        // Insert new profile
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .insert({ user_id: user!.id, ...updates })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      }
     },
     onSuccess: (updatedProfile) => {
       // Update profile cache
@@ -338,9 +362,9 @@ export const useUploadAvatar = () => {
 
       // Update user profile with new avatar URL
       const { data, error } = await supabase
-        .from('users')
-        .update({ avatar_url: publicUrl })
-        .eq('id', user!.id)
+        .from('user_profiles')
+        .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('user_id', user!.id)
         .select()
         .single();
 
@@ -366,16 +390,7 @@ export const useDeleteAccount = () => {
 
   return useMutation({
     mutationFn: async () => {
-      // This would typically be handled by a backend function
-      // For now, we'll just mark the user as deleted
-      const { error } = await supabase
-        .from('users')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', user!.id);
-
-      if (error) throw error;
-      
-      // Sign out the user
+      // Sign out the user (actual deletion should be handled server-side)
       await supabase.auth.signOut();
     },
     onSuccess: () => {

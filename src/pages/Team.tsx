@@ -5,11 +5,13 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSupabaseWorkspace } from '../contexts/SupabaseWorkspaceContext';
 import { useAuth } from '../contexts/SupabaseAuthContext';
 import ModernLayout from '../components/ModernLayout';
+import { toast } from 'sonner';
 import {
   Users,
   UserPlus,
@@ -21,26 +23,37 @@ import {
   MoreVertical,
   Trash2,
   Settings,
-  Activity
+  Activity,
+  Copy,
+  Check
 } from 'lucide-react';
 
 const Team: React.FC = () => {
   const { user } = useAuth();
-  const { 
-    currentWorkspace, 
-    workspaceMembers, 
-    inviteMember, 
+  const {
+    currentWorkspace,
+    workspaceMembers,
+    inviteMember,
     removeMember,
-    loading 
+    updateWorkspace,
+    loading
   } = useSupabaseWorkspace();
 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'member' | 'admin'>('member');
   const [showInviteDialog, setShowInviteDialog] = useState(false);
 
+  // Workspace Settings Edit State
+  const [showEditNameDialog, setShowEditNameDialog] = useState(false);
+  const [showEditDescDialog, setShowEditDescDialog] = useState(false);
+  const [editingName, setEditingName] = useState('');
+  const [editingDescription, setEditingDescription] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const handleInviteMember = async () => {
     if (!inviteEmail.trim()) return;
-    
+
     try {
       await inviteMember(currentWorkspace?.id || '', inviteEmail, inviteRole);
       setInviteEmail('');
@@ -52,13 +65,72 @@ const Team: React.FC = () => {
 
   const handleRemoveMember = async (userId: string) => {
     if (userId === currentWorkspace?.ownerId) return;
-    
+
     if (confirm('Are you sure you want to remove this member?')) {
       try {
         await removeMember(currentWorkspace?.id || '', userId);
       } catch (error) {
         console.error('Failed to remove member:', error);
       }
+    }
+  };
+
+  // Edit Workspace Name
+  const handleEditName = () => {
+    setEditingName(currentWorkspace?.name || '');
+    setShowEditNameDialog(true);
+  };
+
+  const handleSaveName = async () => {
+    if (!editingName.trim() || !currentWorkspace?.id) return;
+
+    setSaving(true);
+    try {
+      await updateWorkspace(currentWorkspace.id, { name: editingName.trim() });
+      toast.success('Workspace name updated successfully!');
+      setShowEditNameDialog(false);
+    } catch (error) {
+      console.error('Failed to update workspace name:', error);
+      toast.error('Failed to update workspace name');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Edit Workspace Description
+  const handleEditDescription = () => {
+    setEditingDescription(currentWorkspace?.description || '');
+    setShowEditDescDialog(true);
+  };
+
+  const handleSaveDescription = async () => {
+    if (!currentWorkspace?.id) return;
+
+    setSaving(true);
+    try {
+      await updateWorkspace(currentWorkspace.id, { description: editingDescription.trim() });
+      toast.success('Workspace description updated successfully!');
+      setShowEditDescDialog(false);
+    } catch (error) {
+      console.error('Failed to update workspace description:', error);
+      toast.error('Failed to update workspace description');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Copy Workspace ID
+  const handleCopyId = async () => {
+    if (!currentWorkspace?.id) return;
+
+    try {
+      await navigator.clipboard.writeText(currentWorkspace.id);
+      setCopied(true);
+      toast.success('Workspace ID copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      toast.error('Failed to copy workspace ID');
     }
   };
 
@@ -81,6 +153,7 @@ const Team: React.FC = () => {
   const currentUserRole = workspaceMembers.find(m => m.userId === user?.id)?.role || 'member';
   const canInviteMembers = currentUserRole === 'owner' || currentUserRole === 'admin';
   const canRemoveMembers = currentUserRole === 'owner' || currentUserRole === 'admin';
+  const canEditSettings = currentUserRole === 'owner' || currentUserRole === 'admin';
 
   return (
     <ModernLayout>
@@ -224,7 +297,7 @@ const Team: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     {canRemoveMembers && member.role !== 'owner' && member.userId !== user?.id && (
                       <Button
@@ -264,9 +337,13 @@ const Team: React.FC = () => {
                   <h4 className="font-medium">Workspace Name</h4>
                   <p className="text-sm text-muted-foreground">{currentWorkspace?.name}</p>
                 </div>
-                <Button variant="outline" size="sm">Edit</Button>
+                {canEditSettings && (
+                  <Button variant="outline" size="sm" onClick={handleEditName}>
+                    Edit
+                  </Button>
+                )}
               </div>
-              
+
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium">Description</h4>
@@ -274,22 +351,96 @@ const Team: React.FC = () => {
                     {currentWorkspace?.description || 'No description provided'}
                   </p>
                 </div>
-                <Button variant="outline" size="sm">Edit</Button>
+                {canEditSettings && (
+                  <Button variant="outline" size="sm" onClick={handleEditDescription}>
+                    Edit
+                  </Button>
+                )}
               </div>
-              
+
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium">Workspace ID</h4>
                   <p className="text-sm text-muted-foreground font-mono">{currentWorkspace?.id}</p>
                 </div>
-                <Button variant="outline" size="sm">Copy</Button>
+                <Button variant="outline" size="sm" onClick={handleCopyId}>
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4 mr-1" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Edit Workspace Name Dialog */}
+        <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Workspace Name</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="workspace-name">Workspace Name</Label>
+                <Input
+                  id="workspace-name"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  placeholder="Enter workspace name"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowEditNameDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveName} disabled={saving} className="btn-orange">
+                  {saving ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Workspace Description Dialog */}
+        <Dialog open={showEditDescDialog} onOpenChange={setShowEditDescDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Workspace Description</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="workspace-description">Description</Label>
+                <Textarea
+                  id="workspace-description"
+                  value={editingDescription}
+                  onChange={(e) => setEditingDescription(e.target.value)}
+                  placeholder="Enter workspace description"
+                  rows={4}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowEditDescDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveDescription} disabled={saving} className="btn-orange">
+                  {saving ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </ModernLayout>
   );
 };
 
 export default Team;
+

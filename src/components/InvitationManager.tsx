@@ -5,12 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import { 
-  Mail, 
-  Check, 
-  X, 
-  Clock, 
-  Users, 
+import {
+  Mail,
+  Check,
+  X,
+  Clock,
+  Users,
   Building2,
   Calendar,
   UserPlus
@@ -25,7 +25,7 @@ interface WorkspaceInvitation {
   workspace_id: string;
   workspace_name: string;
   invited_by: string;
-  invited_email: string;
+  invitee_email: string;
   role: 'member' | 'admin';
   status: 'pending' | 'accepted' | 'declined';
   created_at: string;
@@ -37,7 +37,7 @@ const InvitationManager: React.FC = () => {
   const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
-  
+
   const { user } = useAuth();
 
   // Load pending invitations for current user
@@ -54,7 +54,7 @@ const InvitationManager: React.FC = () => {
       const { data, error } = await supabase
         .from('workspace_invitations')
         .select('*')
-        .eq('invited_email', user.email)
+        .eq('invitee_email', user.email)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
@@ -71,7 +71,7 @@ const InvitationManager: React.FC = () => {
         workspace_id: inv.workspace_id,
         workspace_name: inv.workspace_name,
         invited_by: inv.invited_by,
-        invited_email: inv.invited_email,
+        invitee_email: inv.invitee_email,
         role: inv.role,
         status: inv.status,
         created_at: inv.created_at,
@@ -102,12 +102,12 @@ const InvitationManager: React.FC = () => {
         invitationId: invitation.id,
         userId: user.id,
         userEmail: user.email,
-        invitedEmail: invitation.invited_email
+        invitedEmail: invitation.invitee_email
       });
 
       // Check if the user email matches the invitation email
-      if (user.email !== invitation.invited_email) {
-        throw new Error(`This invitation is for ${invitation.invited_email}, but you are logged in as ${user.email}`);
+      if (user.email !== invitation.invitee_email) {
+        throw new Error(`This invitation is for ${invitation.invitee_email}, but you are logged in as ${user.email}`);
       }
 
       // Call the fixed accept_workspace_invitation function
@@ -221,7 +221,7 @@ const InvitationManager: React.FC = () => {
           Manage your pending workspace invitations
         </CardDescription>
       </CardHeader>
-      
+
       <CardContent>
         {invitations.length === 0 ? (
           <div className="text-center py-8">
@@ -237,7 +237,7 @@ const InvitationManager: React.FC = () => {
               {invitations.map((invitation, index) => {
                 const expired = isExpired(invitation.expires_at);
                 const isProcessing = processingInvitation === invitation.id;
-                
+
                 return (
                   <div key={invitation.id}>
                     <div className={`p-4 border rounded-lg ${expired ? 'opacity-60' : ''}`}>
@@ -250,7 +250,7 @@ const InvitationManager: React.FC = () => {
                               {invitation.role}
                             </Badge>
                           </div>
-                          
+
                           <div className="space-y-1 text-sm text-muted-foreground">
                             <div className="flex items-center gap-2">
                               <Users className="h-3 w-3" />
@@ -270,7 +270,7 @@ const InvitationManager: React.FC = () => {
                             )}
                           </div>
                         </div>
-                        
+
                         {!expired && (
                           <div className="flex gap-2 ml-4">
                             <Button
@@ -295,7 +295,7 @@ const InvitationManager: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    
+
                     {index < invitations.length - 1 && <Separator className="my-4" />}
                   </div>
                 );
@@ -303,7 +303,7 @@ const InvitationManager: React.FC = () => {
             </div>
           </ScrollArea>
         )}
-        
+
         <div className="mt-4 pt-4 border-t">
           <Button
             variant="outline"

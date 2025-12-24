@@ -3,12 +3,12 @@ import { supabase } from '../lib/supabase';
 import { QUERY_KEYS, CACHE_TIMES, GC_TIMES, invalidateQueries } from '../lib/queryClient';
 import { useAuth } from '../contexts/SupabaseAuthContext';
 import { toast } from '../components/ui/sonner';
-import { Task } from '../types';
+import { Task, SubTask, TaskDependency, TaskComment } from '../types';
 
 // Extended task type with relations
 interface TaskWithRelations extends Task {
   comments?: TaskComment[];
-  subtasks?: Subtask[];
+  subtasks?: SubTask[];
   dependencies?: TaskDependency[];
   timeEntries?: TaskTimeEntry[];
   assignee?: {
@@ -19,40 +19,7 @@ interface TaskWithRelations extends Task {
   };
 }
 
-interface TaskComment {
-  id: string;
-  task_id: string;
-  user_id: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-  user?: {
-    id: string;
-    email: string;
-    full_name?: string;
-    avatar_url?: string;
-  };
-}
-
-interface Subtask {
-  id: string;
-  task_id: string;
-  title: string;
-  description?: string;
-  status: 'todo' | 'in_progress' | 'done';
-  created_at: string;
-  updated_at: string;
-  created_by: string;
-}
-
-interface TaskDependency {
-  id: string;
-  task_id: string;
-  depends_on_task_id: string;
-  created_at: string;
-  created_by: string;
-  dependsOnTask?: Task;
-}
+// Removed local interfaces to use global types from ../types
 
 interface TaskTimeEntry {
   id: string;
@@ -69,15 +36,7 @@ interface TaskTimeEntry {
 const fetchWorkspaceTasks = async (workspaceId: string): Promise<Task[]> => {
   const { data, error } = await supabase
     .from('tasks')
-    .select(`
-      *,
-      assignee:users (
-        id,
-        email,
-        full_name,
-        avatar_url
-      )
-    `)
+    .select('*')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false });
 
@@ -89,15 +48,7 @@ const fetchWorkspaceTasks = async (workspaceId: string): Promise<Task[]> => {
 const fetchTask = async (taskId: string): Promise<TaskWithRelations> => {
   const { data: task, error: taskError } = await supabase
     .from('tasks')
-    .select(`
-      *,
-      assignee:users (
-        id,
-        email,
-        full_name,
-        avatar_url
-      )
-    `)
+    .select('*')
     .eq('id', taskId)
     .single();
 
@@ -124,24 +75,27 @@ const fetchTask = async (taskId: string): Promise<TaskWithRelations> => {
 const fetchTaskComments = async (taskId: string): Promise<TaskComment[]> => {
   const { data, error } = await supabase
     .from('task_comments')
-    .select(`
-      *,
-      user:users (
-        id,
-        email,
-        full_name,
-        avatar_url
-      )
-    `)
+    .select('*')
     .eq('task_id', taskId)
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data || [];
+
+  return (data || []).map((item: any) => ({
+    id: item.id,
+    content: item.content,
+    authorId: item.user_id,
+    authorName: 'Unknown',
+    mentions: [],
+    attachments: [],
+    createdAt: item.created_at,
+    isEdited: false,
+    reactions: []
+  }));
 };
 
 // Fetch task subtasks
-const fetchTaskSubtasks = async (taskId: string): Promise<Subtask[]> => {
+const fetchTaskSubtasks = async (taskId: string): Promise<SubTask[]> => {
   const { data, error } = await supabase
     .from('subtasks')
     .select('*')
@@ -149,7 +103,16 @@ const fetchTaskSubtasks = async (taskId: string): Promise<Subtask[]> => {
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data || [];
+
+  return (data || []).map((item: any) => ({
+    id: item.id,
+    title: item.title,
+    completed: item.status === 'done' || item.completed === true,
+    order: item.order || 0,
+    dueDate: item.due_date,
+    createdAt: item.created_at,
+    assigneeId: item.assigned_to
+  }));
 };
 
 // Fetch task dependencies
@@ -168,7 +131,14 @@ const fetchTaskDependencies = async (taskId: string): Promise<TaskDependency[]> 
     .eq('task_id', taskId);
 
   if (error) throw error;
-  return data || [];
+
+  return (data || []).map((item: any) => ({
+    id: item.id,
+    dependentTaskId: item.task_id,
+    dependsOnTaskId: item.depends_on_task_id,
+    type: 'finish_to_start',
+    createdAt: item.created_at
+  }));
 };
 
 // Fetch task time entries

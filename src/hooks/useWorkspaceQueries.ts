@@ -64,21 +64,47 @@ const fetchWorkspace = async (workspaceId: string): Promise<Workspace> => {
 
 // Fetch workspace members
 const fetchWorkspaceMembers = async (workspaceId: string): Promise<WorkspaceMember[]> => {
-  const { data, error } = await supabase
-    .from('workspace_members')
-    .select(`
-      *,
-      user:users (
-        id,
-        email,
-        full_name,
-        avatar_url
-      )
-    `)
-    .eq('workspace_id', workspaceId);
+  try {
+    // Try to fetch with user details from public.users table
+    const { data, error } = await supabase
+      .from('workspace_members')
+      .select(`
+        *,
+        user:users (
+          id,
+          email,
+          full_name,
+          avatar_url
+        )
+      `)
+      .eq('workspace_id', workspaceId);
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      // If users table doesn't exist or permission denied, fetch without user details
+      if (error.code === '42501' || error.message?.includes('permission denied')) {
+        console.warn('Users table not accessible, fetching members without user details');
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('workspace_members')
+          .select('*')
+          .eq('workspace_id', workspaceId);
+
+        if (fallbackError) throw fallbackError;
+        return fallbackData || [];
+      }
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching workspace members:', err);
+    // Final fallback: just fetch members without join
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('workspace_members')
+      .select('*')
+      .eq('workspace_id', workspaceId);
+
+    if (fallbackError) throw fallbackError;
+    return fallbackData || [];
+  }
 };
 
 // Hook to get user's workspaces
@@ -224,19 +250,25 @@ export const useInviteToWorkspace = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ workspaceId, email, role = 'member' }: { 
-      workspaceId: string; 
-      email: string; 
-      role?: 'admin' | 'member' 
+    mutationFn: async ({ workspaceId, email, role = 'member' }: {
+      workspaceId: string;
+      email: string;
+      role?: 'admin' | 'member'
     }) => {
-      // First, find user by email
+      // First, find user by email in public.users table
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('id')
         .eq('email', email)
         .single();
 
-      if (userError) throw new Error('User not found');
+      if (userError) {
+        // Check if it's a permission error or user not found
+        if (userError.code === '42501' || userError.message?.includes('permission denied')) {
+          throw new Error('Database not configured. Please run FINAL_FIX.sql in Supabase SQL Editor.');
+        }
+        throw new Error('User not found. The user must have an account first.');
+      }
 
       // Check if user is already a member
       const { data: existingMember } = await supabase
@@ -308,14 +340,14 @@ export const useUpdateMemberRole = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ 
-      workspaceId, 
-      userId, 
-      role 
-    }: { 
-      workspaceId: string; 
-      userId: string; 
-      role: 'admin' | 'member' 
+    mutationFn: async ({
+      workspaceId,
+      userId,
+      role
+    }: {
+      workspaceId: string;
+      userId: string;
+      role: 'admin' | 'member'
     }) => {
       const { data, error } = await supabase
         .from('workspace_members')

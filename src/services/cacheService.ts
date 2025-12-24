@@ -29,7 +29,7 @@ export class CacheService {
   // Handle when app comes back online
   private handleOnlineStatus() {
     console.log('App is back online, refreshing critical data...');
-    
+
     // Refetch critical queries when back online
     this.queryClient.refetchQueries({
       predicate: (query) => {
@@ -176,7 +176,7 @@ export class CacheService {
   getCacheStats() {
     const cache = this.queryClient.getQueryCache();
     const queries = cache.getAll();
-    
+
     const stats = {
       totalQueries: queries.length,
       freshQueries: queries.filter(q => q.state.dataUpdatedAt > Date.now() - CACHE_TIMES.SHORT).length,
@@ -208,12 +208,12 @@ export class CacheService {
   cleanupStaleCache() {
     const cache = this.queryClient.getQueryCache();
     const queries = cache.getAll();
-    
+
     queries.forEach(query => {
       // Remove queries that haven't been used in a while and are stale
       const lastUsed = query.state.dataUpdatedAt;
       const isOld = lastUsed < Date.now() - (30 * 60 * 1000); // 30 minutes
-      
+
       if (isOld && query.isStale()) {
         cache.remove(query);
       }
@@ -244,11 +244,15 @@ export class CacheService {
   // Data fetching methods (these would typically be in separate services)
   private async fetchUserProfile(userId: string) {
     const { data, error } = await supabase
-      .from('users')
+      .from('user_profiles')
       .select('*')
-      .eq('id', userId)
+      .eq('user_id', userId)
       .single();
-    if (error) throw error;
+    // If no profile found, return null instead of throwing
+    if (error && error.code !== 'PGRST116') {
+      console.warn('Error fetching user profile:', error);
+      return null;
+    }
     return data;
   }
 
@@ -292,20 +296,26 @@ export class CacheService {
   private async fetchWorkspaceMembers(workspaceId: string) {
     const { data, error } = await supabase
       .from('workspace_members')
-      .select('*, user:users(*)')
+      .select('*')
       .eq('workspace_id', workspaceId);
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.warn('Error fetching workspace members:', error);
+      return [];
+    }
+    return data || [];
   }
 
   private async fetchWorkspaceTasks(workspaceId: string) {
     const { data, error } = await supabase
       .from('tasks')
-      .select('*, assignee:users(*)')
+      .select('*')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.warn('Error fetching workspace tasks:', error);
+      return [];
+    }
+    return data || [];
   }
 
   private async fetchWorkspacePages(workspaceId: string) {
@@ -321,31 +331,40 @@ export class CacheService {
   private async fetchTask(taskId: string) {
     const { data, error } = await supabase
       .from('tasks')
-      .select('*, assignee:users(*)')
+      .select('*')
       .eq('id', taskId)
       .single();
-    if (error) throw error;
+    if (error) {
+      console.warn('Error fetching task:', error);
+      return null;
+    }
     return data;
   }
 
   private async fetchTaskComments(taskId: string) {
     const { data, error } = await supabase
       .from('task_comments')
-      .select('*, user:users(*)')
+      .select('*')
       .eq('task_id', taskId)
       .order('created_at', { ascending: true });
-    if (error) throw error;
-    return data;
+    if (error) {
+      console.warn('Error fetching task comments:', error);
+      return [];
+    }
+    return data || [];
   }
 
   private async fetchTaskSubtasks(taskId: string) {
     const { data, error } = await supabase
       .from('subtasks')
       .select('*')
-      .eq('task_id', taskId)
-      .order('created_at', { ascending: true });
-    if (error) throw error;
-    return data;
+      .eq('parent_task_id', taskId)
+      .order('order_index', { ascending: true });
+    if (error) {
+      console.warn('Error fetching subtasks:', error);
+      return [];
+    }
+    return data || [];
   }
 }
 

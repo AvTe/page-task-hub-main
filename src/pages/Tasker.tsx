@@ -6,16 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Search, 
-  Plus, 
-  Inbox, 
-  BarChart3, 
-  CheckCircle2, 
-  Globe, 
-  Timer, 
-  MessageCircle, 
-  GitBranch, 
+import {
+  Search,
+  Plus,
+  Inbox,
+  BarChart3,
+  CheckCircle2,
+  Globe,
+  Timer,
+  MessageCircle,
+  GitBranch,
   Layers,
   Settings,
   PlayCircle,
@@ -67,20 +67,22 @@ const Tasker: React.FC = () => {
     if (!user) return;
 
     try {
-      // Check if advanced features tables exist (gracefully handle errors)
+      // Try to query advanced tables directly - if they don't exist, we'll get an error
       let databaseSetup = false;
-      try {
-        const { data: tables, error } = await supabase
-          .from('information_schema.tables')
-          .select('table_name')
-          .eq('table_schema', 'public')
-          .in('table_name', ['task_dependencies', 'subtasks', 'task_comments', 'task_time_entries']);
 
-        if (!error && tables) {
-          databaseSetup = tables.length === 4;
+      try {
+        // Try a simple query on each table to check if they exist
+        const [timeEntriesCheck, commentsCheck] = await Promise.all([
+          supabase.from('task_time_entries').select('id').limit(1),
+          supabase.from('task_comments').select('id').limit(1)
+        ]);
+
+        // If both queries succeed (no 404 error), tables exist
+        if (!timeEntriesCheck.error && !commentsCheck.error) {
+          databaseSetup = true;
         }
       } catch (tableCheckError) {
-        console.log('Advanced tables check failed, continuing with basic features');
+        console.log('Advanced tables not available, using basic features');
         databaseSetup = false;
       }
 
@@ -89,13 +91,24 @@ const Tasker: React.FC = () => {
         return;
       }
 
-      // Load stats
-      const [timeEntries, comments, dependencies, subtasks] = await Promise.all([
+      // Load stats from available tables
+      const [timeEntries, comments] = await Promise.all([
         supabase.from('task_time_entries').select('duration_minutes, end_time').eq('user_id', user.id),
-        supabase.from('task_comments').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('task_dependencies').select('*', { count: 'exact', head: true }).eq('created_by', user.id),
-        supabase.from('subtasks').select('*').eq('created_by', user.id)
+        supabase.from('task_comments').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
       ]);
+
+      // Try to load optional tables (may not exist)
+      let dependenciesCount = 0;
+      let subtasksCount = 0;
+      try {
+        const depResult = await supabase.from('task_dependencies').select('*', { count: 'exact', head: true }).eq('created_by', user.id);
+        dependenciesCount = depResult.count || 0;
+      } catch (e) { /* table may not exist */ }
+
+      try {
+        const subResult = await supabase.from('subtasks').select('*').eq('created_by', user.id);
+        subtasksCount = subResult.data?.length || 0;
+      } catch (e) { /* table may not exist */ }
 
       const totalTimeTracked = timeEntries.data?.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0) || 0;
       const activeTimers = timeEntries.data?.filter(entry => !entry.end_time).length || 0;
@@ -104,13 +117,14 @@ const Tasker: React.FC = () => {
         totalTimeTracked,
         activeTimers,
         totalComments: comments.count || 0,
-        totalDependencies: dependencies.count || 0,
-        totalSubtasks: subtasks.data?.length || 0,
+        totalDependencies: dependenciesCount,
+        totalSubtasks: subtasksCount,
         databaseSetup: true
       });
 
     } catch (error) {
       console.error('Error loading advanced stats:', error);
+      setAdvancedStats(prev => ({ ...prev, databaseSetup: false }));
     }
   };
 
@@ -154,12 +168,12 @@ const Tasker: React.FC = () => {
 
   // Calculate stats
   const totalTasks = state.unassignedTasks.length + state.pages.reduce((sum, page) => sum + page.tasks.length, 0);
-  const completedTasks = state.unassignedTasks.filter(task => task.status === 'done').length + 
-                        state.pages.reduce((sum, page) => sum + page.tasks.filter(task => task.status === 'done').length, 0);
+  const completedTasks = state.unassignedTasks.filter(task => task.status === 'done').length +
+    state.pages.reduce((sum, page) => sum + page.tasks.filter(task => task.status === 'done').length, 0);
   const progressPercentage = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
   // Filter tasks based on search
-  const filteredTasks = searchQuery 
+  const filteredTasks = searchQuery
     ? searchTasks(searchQuery)
     : state.unassignedTasks;
 

@@ -34,7 +34,6 @@ import {
   LazyAnalytics,
   LazyTeam,
   LazyWebsites,
-  LazyNotificationCenter,
   preloadCriticalComponents
 } from "./components/routes/LazyRoutes";
 

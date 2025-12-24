@@ -336,6 +336,7 @@ const Landing: React.FC = () => {
                         value={formData.email}
                         onChange={handleInputChange}
                         className="pl-10 h-12"
+                        autoComplete="email"
                         required
                       />
                     </div>
@@ -353,6 +354,7 @@ const Landing: React.FC = () => {
                         value={formData.password}
                         onChange={handleInputChange}
                         className="pl-10 pr-10 h-12"
+                        autoComplete={isLogin ? 'current-password' : 'new-password'}
                         required
                       />
                       <button
@@ -378,6 +380,7 @@ const Landing: React.FC = () => {
                           value={formData.confirmPassword}
                           onChange={handleInputChange}
                           className="pl-10 h-12"
+                          autoComplete="new-password"
                           required
                         />
                       </div>

@@ -6,7 +6,7 @@ import { lazy } from 'react';
 
 // Authentication Pages
 export const LazyLogin = lazy(() => import('../../pages/Login'));
-export const LazyLanding = lazy(() => import('../../pages/Landing'));
+// Note: Landing is NOT lazy-loaded because it's used on the critical auth path
 
 // Main Application Pages
 export const LazyHome = lazy(() => import('../../pages/Home'));
@@ -36,8 +36,8 @@ export const LazyInvitationModal = lazy(() => import('../InvitationManager'));
 
 // Complex Components
 export const LazyWorkspaceSelector = lazy(() => import('../WorkspaceSelector'));
-export const LazyNotificationCenter = lazy(() => import('../NotificationCenter'));
-export const LazySearchModal = lazy(() => import('../GlobalSearchModal'));
+// Note: NotificationCenter is NOT lazy-loaded because it's used in ModernHeader
+// Note: GlobalSearchModal is NOT lazy-loaded because it's used in App.tsx
 export const LazyTimeTracker = lazy(() => import('../TimeTracker'));
 
 // =====================================================
@@ -67,11 +67,11 @@ export const preloadComponents = (components: any[]) => {
  */
 export const preloadCriticalComponents = () => {
   // Preload components that are likely to be used immediately
+  // Note: NotificationCenter is statically imported so no need to preload
   preloadComponents([
     LazyHome,
     LazyTasker,
-    LazyWorkspaceSelector,
-    LazyNotificationCenter
+    LazyWorkspaceSelector
   ]);
 };
 

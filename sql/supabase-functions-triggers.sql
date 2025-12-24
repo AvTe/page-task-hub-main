@@ -110,22 +110,27 @@ END;
 $$ language 'plpgsql';
 
 -- Apply updated_at triggers to relevant tables
+DROP TRIGGER IF EXISTS update_workspaces_updated_at ON workspaces;
 CREATE TRIGGER update_workspaces_updated_at 
   BEFORE UPDATE ON workspaces 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_pages_updated_at ON pages;
 CREATE TRIGGER update_pages_updated_at 
   BEFORE UPDATE ON pages 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_tasks_updated_at ON tasks;
 CREATE TRIGGER update_tasks_updated_at 
   BEFORE UPDATE ON tasks 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_task_comments_updated_at ON task_comments;
 CREATE TRIGGER update_task_comments_updated_at 
   BEFORE UPDATE ON task_comments 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_user_presence_updated_at ON user_presence;
 CREATE TRIGGER update_user_presence_updated_at 
   BEFORE UPDATE ON user_presence 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -143,6 +148,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS add_workspace_owner_as_member_trigger ON workspaces;
 CREATE TRIGGER add_workspace_owner_as_member_trigger
   AFTER INSERT ON workspaces
   FOR EACH ROW EXECUTE FUNCTION add_workspace_owner_as_member();
@@ -163,6 +169,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS set_task_completed_at_trigger ON tasks;
 CREATE TRIGGER set_task_completed_at_trigger
   BEFORE UPDATE ON tasks
   FOR EACH ROW EXECUTE FUNCTION set_task_completed_at();
@@ -216,6 +223,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS log_workspace_created_trigger ON workspaces;
 CREATE TRIGGER log_workspace_created_trigger
   AFTER INSERT ON workspaces
   FOR EACH ROW EXECUTE FUNCTION log_workspace_created();
@@ -239,6 +247,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS log_page_created_trigger ON pages;
 CREATE TRIGGER log_page_created_trigger
   AFTER INSERT ON pages
   FOR EACH ROW EXECUTE FUNCTION log_page_created();
@@ -266,6 +275,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS log_task_created_trigger ON tasks;
 CREATE TRIGGER log_task_created_trigger
   AFTER INSERT ON tasks
   FOR EACH ROW EXECUTE FUNCTION log_task_created();
@@ -288,6 +298,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS log_task_completed_trigger ON tasks;
 CREATE TRIGGER log_task_completed_trigger
   AFTER UPDATE ON tasks
   FOR EACH ROW EXECUTE FUNCTION log_task_completed();
@@ -324,6 +335,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS log_member_joined_trigger ON workspace_members;
 CREATE TRIGGER log_member_joined_trigger
   AFTER INSERT ON workspace_members
   FOR EACH ROW EXECUTE FUNCTION log_member_joined();

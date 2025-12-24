@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Search, 
-  Plus, 
-  Filter, 
-  SortAsc, 
+import {
+  Search,
+  Plus,
+  Filter,
+  SortAsc,
   MoreHorizontal,
   Calendar,
   User,
@@ -48,14 +48,14 @@ interface TaskColumn {
   limit?: number;
 }
 
-const TaskBoard: React.FC<TaskBoardProps> = ({ 
-  view = 'board', 
-  showFilters = true, 
-  compactMode = false 
+const TaskBoard: React.FC<TaskBoardProps> = ({
+  view = 'board',
+  showFilters = true,
+  compactMode = false
 }) => {
   const { state, updateTask, searchTasks } = useTask();
   const { user } = useAuth();
-  
+
   // State management
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPriority, setSelectedPriority] = useState<string>('all');
@@ -77,7 +77,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
 
     // Search filter
     if (searchQuery.trim()) {
-      filtered = filtered.filter(task => 
+      filtered = filtered.filter(task =>
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -151,7 +151,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     if (!result.destination) return;
 
     const { source, destination, draggableId } = result;
-    
+
     if (source.droppableId === destination.droppableId) {
       // Same column reordering - handle later
       return;
@@ -173,7 +173,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     const total = filteredTasks.length;
     const completed = filteredTasks.filter(task => task.status === 'done').length;
     const inProgress = filteredTasks.filter(task => task.status === 'progress').length;
-    const overdue = filteredTasks.filter(task => 
+    const overdue = filteredTasks.filter(task =>
       task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done'
     ).length;
 
@@ -211,7 +211,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
             )}
           </div>
         </div>
-        
+
         <div className="flex gap-2">
           <Button
             onClick={() => setShowAddTaskModal(true)}
@@ -322,9 +322,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                   <CardContent
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className={`space-y-3 min-h-[200px] pb-4 ${
-                      snapshot.isDraggingOver ? 'bg-muted/50' : ''
-                    }`}
+                    className={`space-y-3 min-h-[200px] pb-4 ${snapshot.isDraggingOver ? 'bg-muted/50' : ''
+                      }`}
                   >
                     {column.tasks.map((task, index) => (
                       <Draggable key={task.id} draggableId={task.id} index={index}>
@@ -333,9 +332,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className={`${
-                              snapshot.isDragging ? 'rotate-2 shadow-lg' : ''
-                            }`}
+                            className={`${snapshot.isDragging ? 'rotate-2 shadow-lg' : ''
+                              }`}
                           >
                             <EnhancedTaskCard
                               task={task}
@@ -384,3 +382,5 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     </div>
   );
 };
+
+export default TaskBoard;

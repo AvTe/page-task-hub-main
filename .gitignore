@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# System files
+*.stackdump
+Thumbs.db
+*.bak
+*.tmp
+*.temp
+
+# Environment files (keep .env.example, ignore actual .env)
+.env
+.env.production

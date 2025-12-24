@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { 
-  Workspace, 
-  WorkspaceMember, 
-  WorkspaceInvitation, 
+import {
+  Workspace,
+  WorkspaceMember,
+  WorkspaceInvitation,
   UserRole,
   UserActivity,
-  UserPresence 
+  UserPresence
 } from '../types/workspace';
 import { useAuth } from './SupabaseAuthContext';
 import { supabase } from '../lib/supabase';
@@ -21,14 +21,14 @@ interface WorkspaceContextType {
   userActivities: UserActivity[];
   onlineUsers: UserPresence[];
   loading: boolean;
-  
+
   // Workspace management
   createWorkspace: (workspace: Omit<Workspace, 'id' | 'createdAt' | 'updatedAt' | 'ownerId' | 'members' | 'inviteCode'>) => Promise<void>;
   updateWorkspace: (workspaceId: string, updates: Partial<Workspace>) => Promise<void>;
   deleteWorkspace: (workspaceId: string) => Promise<void>;
   switchWorkspace: (workspaceId: string) => void;
   leaveWorkspace: (workspaceId: string) => Promise<void>;
-  
+
   // Member management
   inviteMember: (workspaceId: string, email: string, role: UserRole) => Promise<void>;
   removeMember: (workspaceId: string, userId: string) => Promise<void>;
@@ -36,7 +36,7 @@ interface WorkspaceContextType {
   acceptInvitation: (invitationId: string) => Promise<void>;
   declineInvitation: (invitationId: string) => Promise<void>;
   joinWorkspaceByCode: (inviteCode: string) => Promise<void>;
-  
+
   // Real-time features
   updateUserPresence: (presence: Partial<UserPresence>) => void;
   trackActivity: (activity: Omit<UserActivity, 'userId' | 'timestamp'>) => Promise<void>;
@@ -93,17 +93,17 @@ function workspaceReducer(state: WorkspaceState, action: WorkspaceAction): Works
     case 'SET_ONLINE_USERS':
       return { ...state, onlineUsers: action.payload };
     case 'ADD_WORKSPACE':
-      return { 
-        ...state, 
-        userWorkspaces: [...state.userWorkspaces, action.payload] 
+      return {
+        ...state,
+        userWorkspaces: [...state.userWorkspaces, action.payload]
       };
     case 'UPDATE_WORKSPACE':
       return {
         ...state,
-        userWorkspaces: state.userWorkspaces.map(w => 
+        userWorkspaces: state.userWorkspaces.map(w =>
           w.id === action.payload.id ? { ...w, ...action.payload.updates } : w
         ),
-        currentWorkspace: state.currentWorkspace?.id === action.payload.id 
+        currentWorkspace: state.currentWorkspace?.id === action.payload.id
           ? { ...state.currentWorkspace, ...action.payload.updates }
           : state.currentWorkspace
       };
@@ -188,7 +188,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
 
       dispatch({ type: 'ADD_WORKSPACE', payload: newWorkspace });
       dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: newWorkspace });
-      
+
       // Track activity
       await trackActivity({
         action: 'created',
@@ -196,7 +196,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
         resourceId: workspace.id,
         details: { workspaceName: workspace.name }
       });
-      
+
       toast.success(`Workspace "${newWorkspace.name}" created successfully!`);
     } catch (error) {
       console.error('Error creating workspace:', error);
@@ -211,7 +211,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
   // Update workspace
   const updateWorkspace = async (workspaceId: string, updates: Partial<Workspace>) => {
     if (!user) return;
-    
+
     try {
       const { error } = await supabase
         .from('workspaces')
@@ -236,7 +236,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
   // Delete workspace
   const deleteWorkspace = async (workspaceId: string) => {
     if (!user) return;
-    
+
     try {
       const { error } = await supabase
         .from('workspaces')
@@ -266,7 +266,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
   // Track activity
   const trackActivity = async (activity: Omit<UserActivity, 'userId' | 'timestamp'>) => {
     if (!user) return;
-    
+
     try {
       await supabase
         .from('user_activities')
@@ -325,7 +325,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
         .from('workspace_invitations')
         .select('*')
         .eq('workspace_id', workspaceId)
-        .eq('invited_email', email)
+        .eq('invitee_email', email)
         .eq('status', 'pending')
         .single();
 
@@ -358,7 +358,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
           workspace_name: workspace.name,
           invited_by: user.id,
           invited_by_name: user.user_metadata?.full_name || user.email || 'Unknown',
-          invited_email: email,
+          invitee_email: email,
           role: role,
           invite_code: inviteCode,
           status: 'pending'
@@ -387,7 +387,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
             workspace_id: workspaceId,
             user_id: user.id,
             activity_type: 'member_invited',
-            activity_data: { invited_email: email, role: role, email_sent: emailSent }
+            activity_data: { invitee_email: email, role: role, email_sent: emailSent }
           });
 
         if (emailSent) {
@@ -572,7 +572,15 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
   };
 
   const updateUserPresence = async (presence: Partial<UserPresence>) => {
-    if (!user || !state.currentWorkspace) return;
+    // Early return if no user or no valid workspace
+    if (!user || !state.currentWorkspace?.id) return;
+
+    // Validate workspace ID is a valid UUID format (not a placeholder)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(state.currentWorkspace.id)) {
+      console.warn('Invalid workspace ID, skipping presence update');
+      return;
+    }
 
     try {
       const presenceData = {
@@ -589,7 +597,17 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
         .upsert(presenceData, { onConflict: 'user_id' });
 
       if (error) {
-        console.error('Error updating user presence:', error);
+        // Silently ignore foreign key errors when workspace doesn't exist yet
+        if (error.code === '23503') {
+          console.debug('Workspace not ready for presence update, skipping');
+          return;
+        }
+        // Silently ignore RLS policy violations (user_presence policies may not be set up)
+        if (error.code === '42501') {
+          console.debug('User presence RLS not configured, skipping');
+          return;
+        }
+        console.debug('Error updating user presence:', error);
         return;
       }
 
@@ -611,7 +629,8 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
 
       dispatch({ type: 'SET_ONLINE_USERS', payload: updatedOnlineUsers });
     } catch (error) {
-      console.error('Error updating user presence:', error);
+      // Silently handle presence errors to avoid console spam
+      console.debug('Presence update failed:', error);
     }
   };
 
@@ -619,54 +638,69 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
   const loadUserWorkspaces = async () => {
     if (!user) return;
 
+
+
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
 
-      // Get workspaces where user is a member
+      // Get workspaces where user is the owner
+
+      // Get workspaces where user is owner (simpler query, less likely to fail)
+      const { data: ownedData, error: ownedError } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('owner_id', user.id);
+
+      if (ownedError) {
+        console.error('Error loading owned workspaces:', ownedError);
+        // Continue - might still be able to load member workspaces
+      }
+
+      // Get workspaces where user is a member (excluding owner, to avoid duplicates)
       const { data: memberData, error: memberError } = await supabase
         .from('workspace_members')
-        .select(`
-          workspace_id,
-          workspaces (
-            id,
-            name,
-            description,
-            owner_id,
-            settings,
-            invite_code,
-            created_at,
-            updated_at
-          )
-        `)
+        .select('workspace_id')
         .eq('user_id', user.id);
 
-      if (memberError) throw memberError;
-
-      // Convert to frontend format and get member counts
-      const workspaces: Workspace[] = [];
-
-      for (const item of memberData.filter(item => item.workspaces)) {
-        const ws = item.workspaces as any;
-
-        // Get member count for this workspace
-        const { count: memberCount } = await supabase
-          .from('workspace_members')
-          .select('*', { count: 'exact', head: true })
-          .eq('workspace_id', ws.id);
-
-        workspaces.push({
-          id: ws.id,
-          name: ws.name,
-          description: ws.description || '',
-          ownerId: ws.owner_id,
-          members: [], // Will be loaded separately when needed
-          inviteCode: ws.invite_code,
-          settings: ws.settings,
-          createdAt: ws.created_at,
-          updatedAt: ws.updated_at,
-          memberCount: memberCount || 0 // Add member count
-        });
+      if (memberError) {
+        console.error('Error loading member workspaces:', memberError);
+        // Continue with just owned workspaces
       }
+
+      // Get workspace details for memberships (if we have any)
+      let memberWorkspaces: any[] = [];
+      if (memberData && memberData.length > 0) {
+        const memberWorkspaceIds = memberData.map(m => m.workspace_id);
+        const { data: wsData } = await supabase
+          .from('workspaces')
+          .select('*')
+          .in('id', memberWorkspaceIds)
+          .neq('owner_id', user.id); // Exclude already owned
+
+        memberWorkspaces = wsData || [];
+      }
+
+      // Combine owned and member workspaces
+      const allWorkspacesRaw = [...(ownedData || []), ...memberWorkspaces];
+
+      // Remove duplicates
+      const uniqueWorkspaces = allWorkspacesRaw.filter((ws, index, self) =>
+        index === self.findIndex(w => w.id === ws.id)
+      );
+
+      // Convert to frontend format
+      const workspaces: Workspace[] = uniqueWorkspaces.map(ws => ({
+        id: ws.id,
+        name: ws.name,
+        description: ws.description || '',
+        ownerId: ws.owner_id,
+        members: [],
+        inviteCode: ws.invite_code,
+        settings: ws.settings,
+        createdAt: ws.created_at,
+        updatedAt: ws.updated_at,
+        memberCount: 0
+      }));
 
       dispatch({ type: 'SET_USER_WORKSPACES', payload: workspaces });
 
@@ -679,9 +713,12 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
       if (currentWorkspace) {
         dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: currentWorkspace });
       }
+
+
     } catch (error) {
       console.error('Error loading workspaces:', error);
-      toast.error('Failed to load workspaces');
+
+      toast.error('Failed to load workspaces. Check database configuration.');
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
@@ -690,64 +727,36 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
   // Load workspace members
   const loadWorkspaceMembers = async (workspaceId: string) => {
     try {
-      // Use the safe view instead of complex joins
       const { data: memberData, error: memberError } = await supabase
-        .from('safe_workspace_members')
-        .select('*')
+        .from('workspace_members')
+        .select('user_id, role, joined_at, display_name, email')
         .eq('workspace_id', workspaceId);
 
       if (memberError) {
-        console.error('Error with safe view, trying basic query:', memberError);
-
-        // Fallback to basic workspace_members query
-        const { data: basicData, error: basicError } = await supabase
-          .from('workspace_members')
-          .select('user_id, role, joined_at, invited_by, display_name, email')
-          .eq('workspace_id', workspaceId);
-
-        if (basicError) throw basicError;
-
-        // Transform basic data
-        const members: WorkspaceMember[] = (basicData || []).map(member => ({
-          userId: member.user_id,
-          email: member.email || 'user@example.com',
-          displayName: member.display_name || 'User',
-          photoURL: undefined,
-          role: member.role,
-          joinedAt: member.joined_at || new Date().toISOString(),
-          lastActive: new Date().toISOString(),
-          permissions: [],
-          isOnline: true,
-          jobTitle: undefined,
-          department: undefined
-        }));
-
-        dispatch({ type: 'SET_WORKSPACE_MEMBERS', payload: members });
-        console.log(`Loaded ${members.length} workspace members (basic)`);
+        console.error('Error loading workspace members:', memberError);
+        // Set empty array on error to prevent infinite loading
+        dispatch({ type: 'SET_WORKSPACE_MEMBERS', payload: [] });
         return;
       }
 
-      // Transform the data from safe view
+      // Transform the data
       const members: WorkspaceMember[] = (memberData || []).map(member => ({
         userId: member.user_id,
         email: member.email || 'user@example.com',
         displayName: member.display_name || 'User',
-        photoURL: member.avatar_url,
+        photoURL: undefined, // We don't have avatar_url in workspace_members in this schema
         role: member.role,
         joinedAt: member.joined_at || new Date().toISOString(),
-        lastActive: member.last_seen || new Date().toISOString(),
+        lastActive: new Date().toISOString(),
         permissions: [],
-        isOnline: member.is_active || true,
-        jobTitle: member.job_title,
-        department: member.department,
-        fullName: member.full_name
+        isOnline: true, // simplified for now
+        jobTitle: undefined,
+        department: undefined
       }));
 
       dispatch({ type: 'SET_WORKSPACE_MEMBERS', payload: members });
-      console.log(`Loaded ${members.length} workspace members`);
     } catch (error) {
       console.error('Error loading workspace members:', error);
-      // Set empty array on error to prevent infinite loading
       dispatch({ type: 'SET_WORKSPACE_MEMBERS', payload: [] });
     }
   };
