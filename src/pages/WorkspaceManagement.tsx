@@ -128,7 +128,23 @@ const WorkspaceManagement: React.FC = () => {
     }
 
     try {
-      await createWorkspace(newWorkspace.name, newWorkspace.description);
+      await createWorkspace({
+        name: newWorkspace.name.trim(),
+        description: newWorkspace.description.trim(),
+        settings: {
+          isPublic: false,
+          allowGuestAccess: false,
+          requireApprovalForJoining: true,
+          defaultMemberRole: 'member' as const,
+          notificationSettings: {
+            emailNotifications: true,
+            taskAssignments: true,
+            taskComments: true,
+            taskStatusChanges: true,
+            workspaceUpdates: true
+          }
+        }
+      });
       setNewWorkspace({ name: '', description: '' });
       setShowCreateDialog(false);
       toast.success('Workspace created successfully!');
@@ -179,8 +195,8 @@ const WorkspaceManagement: React.FC = () => {
     }
 
     try {
-      await inviteMember(selectedWorkspace.id, inviteEmail, inviteRole);
-      
+      await inviteMember(selectedWorkspace.id, inviteEmail, inviteRole as 'admin' | 'member' | 'guest');
+
       // Send email notification
       if (user) {
         await notificationService.sendWorkspaceInvitation({
@@ -220,7 +236,7 @@ const WorkspaceManagement: React.FC = () => {
 
   const handleRoleChange = async (workspaceId: string, userId: string, newRole: string) => {
     try {
-      await updateMemberRole(workspaceId, userId, newRole);
+      await updateMemberRole(workspaceId, userId, newRole as 'admin' | 'member' | 'guest');
       toast.success('Member role updated successfully!');
     } catch (error) {
       console.error('Error updating member role:', error);
@@ -374,7 +390,7 @@ const WorkspaceManagement: React.FC = () => {
                       <Calendar className="h-8 w-8 text-green-500" />
                       <div>
                         <p className="text-2xl font-bold">
-                          {new Date(currentWorkspace.createdAt || currentWorkspace.created_at).toLocaleDateString()}
+                          {new Date(currentWorkspace.createdAt).toLocaleDateString()}
                         </p>
                         <p className="text-sm text-muted-foreground">Created</p>
                       </div>
@@ -415,7 +431,7 @@ const WorkspaceManagement: React.FC = () => {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => copyInviteLink(currentWorkspace.invite_code || `invite-${currentWorkspace.id}`)}
+                      onClick={() => copyInviteLink(currentWorkspace.inviteCode || `invite-${currentWorkspace.id}`)}
                       className="flex items-center gap-2"
                     >
                       <Copy className="h-4 w-4" />
@@ -483,7 +499,7 @@ const WorkspaceManagement: React.FC = () => {
                     {workspaceMembers
                       .filter(member => {
                         const matchesSearch = member.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                            member.email.toLowerCase().includes(searchTerm.toLowerCase());
+                          member.email.toLowerCase().includes(searchTerm.toLowerCase());
                         const matchesRole = roleFilter === 'all' || member.role === roleFilter;
                         return matchesSearch && matchesRole;
                       })
@@ -534,11 +550,11 @@ const WorkspaceManagement: React.FC = () => {
                                     Make Member
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => handleRoleChange(currentWorkspace.id, member.userId, 'viewer')}
-                                    disabled={member.role === 'viewer'}
+                                    onClick={() => handleRoleChange(currentWorkspace.id, member.userId, 'guest')}
+                                    disabled={member.role === 'guest'}
                                   >
                                     <Eye className="h-4 w-4 mr-2" />
-                                    Make Viewer
+                                    Make Guest
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
@@ -597,7 +613,7 @@ const WorkspaceManagement: React.FC = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => copyInviteLink(currentWorkspace.invite_code || `invite-${currentWorkspace.id}`)}
+                            onClick={() => copyInviteLink(currentWorkspace.inviteCode || `invite-${currentWorkspace.id}`)}
                           >
                             <Copy className="h-4 w-4 mr-2" />
                             Copy
@@ -665,7 +681,7 @@ const WorkspaceManagement: React.FC = () => {
                       <div className="flex-1">
                         <p className="text-sm">Workspace created</p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(currentWorkspace.createdAt || currentWorkspace.created_at).toLocaleString()}
+                          {new Date(currentWorkspace.createdAt).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -704,9 +720,8 @@ const WorkspaceManagement: React.FC = () => {
         {/* All Workspaces */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {userWorkspaces.map((workspace) => (
-            <Card key={workspace.id} className={`relative ${
-              currentWorkspace?.id === workspace.id ? 'ring-2 ring-primary' : ''
-            }`}>
+            <Card key={workspace.id} className={`relative ${currentWorkspace?.id === workspace.id ? 'ring-2 ring-primary' : ''
+              }`}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
@@ -752,7 +767,7 @@ const WorkspaceManagement: React.FC = () => {
                         Invite Members
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => copyInviteLink(workspace.invite_code || `invite-${workspace.id}`)}
+                        onClick={() => copyInviteLink(workspace.inviteCode || `invite-${workspace.id}`)}
                       >
                         <Copy className="h-4 w-4 mr-2" />
                         Copy Invite Link
@@ -777,12 +792,12 @@ const WorkspaceManagement: React.FC = () => {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Members</span>
                     <Badge variant="secondary">
-                      {workspace.member_count || 0}
+                      {workspace.memberCount || workspace.members?.length || 0}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Created</span>
-                    <span>{new Date(workspace.created_at).toLocaleDateString()}</span>
+                    <span>{new Date(workspace.createdAt).toLocaleDateString()}</span>
                   </div>
                   {currentWorkspace?.id === workspace.id && (
                     <Badge className="w-full justify-center">

@@ -32,6 +32,8 @@ If setting up a fresh database, run these scripts in order:
 ### Fix Scripts (Troubleshooting)
 | File | Description |
 |------|-------------|
+| `FIX_ORPHANED_OWNER_AND_PRESENCE.sql` | ✅ Fixes orphaned owner bug & user presence RLS |
+| `FIX_CACHE_AND_INVITATIONS.sql` | ✅ **NEW** - Fixes ghost invitations & cache issues |
 | `FIX_INFINITE_RECURSION.sql` | Fixes infinite recursion in RLS policies |
 | `FIX_USERS_PERMISSION.sql` | Fixes user table permissions |
 | `FIX_USERS_NOW.sql` | Quick fix for users table |

@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
+import {
   Calendar,
   Flag,
   MessageCircle,
@@ -33,30 +33,30 @@ interface EnhancedTaskCardProps {
   onTaskClick?: (task: Task) => void;
 }
 
-const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({ 
-  task, 
-  compact = false, 
+const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
+  task,
+  compact = false,
   showProject = false,
-  onTaskClick 
+  onTaskClick
 }) => {
   const { updateTask, deleteTask, duplicateTask, state } = useTask();
   const [showActions, setShowActions] = useState(false);
 
   // Get priority configuration
   const priorityConfig = TASK_PRIORITIES[task.priority || 'medium'];
-  
-  // Calculate due date status
+
+  // Calculate due date status with dark mode support
   const getDueDateStatus = () => {
     if (!task.dueDate) return null;
-    
+
     const dueDate = new Date(task.dueDate);
     const now = new Date();
     const tomorrow = addDays(now, 1);
-    
+
     if (isBefore(dueDate, now) && task.status !== 'done') {
-      return { status: 'overdue', color: 'text-red-600', bgColor: 'bg-red-50' };
+      return { status: 'overdue', color: 'text-red-600 dark:text-red-400', bgColor: 'bg-red-50 dark:bg-red-950/30' };
     } else if (isBefore(dueDate, tomorrow) && task.status !== 'done') {
-      return { status: 'due-soon', color: 'text-orange-600', bgColor: 'bg-orange-50' };
+      return { status: 'due-soon', color: 'text-orange-600 dark:text-orange-400', bgColor: 'bg-orange-50 dark:bg-orange-950/30' };
     }
     return { status: 'normal', color: 'text-muted-foreground', bgColor: '' };
   };
@@ -119,10 +119,9 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
 
   if (compact) {
     return (
-      <Card 
-        className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
-          dueDateStatus?.bgColor || ''
-        }`}
+      <Card
+        className={`cursor-pointer transition-all duration-200 hover:shadow-md bg-card dark:bg-card border border-border ${dueDateStatus?.bgColor || ''
+          }`}
         onClick={handleCardClick}
       >
         <CardContent className="p-3">
@@ -134,17 +133,17 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
                   {task.title}
                 </h3>
               </div>
-              
+
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {task.priority && (
-                  <Badge 
-                    variant="secondary" 
+                  <Badge
+                    variant="secondary"
                     className={`${priorityConfig.color} ${priorityConfig.textColor} text-xs px-1 py-0`}
                   >
                     {priorityConfig.label}
                   </Badge>
                 )}
-                
+
                 {task.dueDate && (
                   <div className={`flex items-center gap-1 ${dueDateStatus?.color}`}>
                     <Calendar className="h-3 w-3" />
@@ -161,7 +160,7 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
                   <span>{task.comments.length}</span>
                 </div>
               )}
-              
+
               {task.attachments && task.attachments.length > 0 && (
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Paperclip className="h-3 w-3" />
@@ -176,10 +175,9 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
   }
 
   return (
-    <Card 
-      className={`cursor-pointer transition-all duration-200 hover:shadow-md group ${
-        dueDateStatus?.bgColor || ''
-      } ${task.status === 'done' ? 'opacity-75' : ''}`}
+    <Card
+      className={`cursor-pointer transition-all duration-200 hover:shadow-md group bg-card dark:bg-card border border-border ${dueDateStatus?.bgColor || ''
+        } ${task.status === 'done' ? 'opacity-75' : ''}`}
       onClick={handleCardClick}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
@@ -193,11 +191,11 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
               {task.title}
             </h3>
           </div>
-          
+
           {/* Priority Badge */}
           {task.priority && (
-            <Badge 
-              variant="secondary" 
+            <Badge
+              variant="secondary"
               className={`${priorityConfig.color} ${priorityConfig.textColor} shrink-0`}
             >
               <Flag className="h-3 w-3 mr-1" />
@@ -216,8 +214,8 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
         {/* Project Info */}
         {showProject && project && (
           <div className="flex items-center gap-2 mb-3">
-            <div 
-              className="w-3 h-3 rounded-full" 
+            <div
+              className="w-3 h-3 rounded-full"
               style={{ backgroundColor: project.color }}
             />
             <span className="text-xs text-muted-foreground">{project.title}</span>
@@ -243,18 +241,25 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
         {/* Footer */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {/* Due Date */}
-            {task.dueDate && (
-              <div className={`flex items-center gap-1 ${dueDateStatus?.color}`}>
-                <Calendar className="h-3 w-3" />
-                <span>{formatDueDate(task.dueDate)}</span>
-                {dueDateStatus?.status === 'overdue' && (
-                  <AlertTriangle className="h-3 w-3" />
-                )}
-              </div>
-            )}
+            {/* Date info - Shows ONLY on hover */}
+            <div className={`flex items-center gap-1 transition-opacity duration-200 ${showActions ? 'opacity-100' : 'opacity-0'}`}>
+              {task.dueDate ? (
+                <div className={`flex items-center gap-1 ${dueDateStatus?.color}`}>
+                  <Calendar className="h-3 w-3" />
+                  <span>{formatDueDate(task.dueDate)}</span>
+                  {dueDateStatus?.status === 'overdue' && (
+                    <AlertTriangle className="h-3 w-3" />
+                  )}
+                </div>
+              ) : task.createdAt ? (
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  <span>Created {formatDueDate(task.createdAt)}</span>
+                </div>
+              ) : null}
+            </div>
 
-            {/* Assignee */}
+            {/* Assignee - Always visible */}
             {task.assignedToName && (
               <div className="flex items-center gap-1">
                 <User className="h-3 w-3" />
@@ -271,7 +276,7 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
                 <span>{task.comments.length}</span>
               </div>
             )}
-            
+
             {/* Attachments Count */}
             {task.attachments && task.attachments.length > 0 && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -290,35 +295,33 @@ const EnhancedTaskCard: React.FC<EnhancedTaskCardProps> = ({
               </div>
             )}
 
-            {/* Actions Menu */}
-            {showActions && (
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleEdit}
-                  className="h-6 w-6 p-0"
-                >
-                  <Edit2 className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleDuplicate}
-                  className="h-6 w-6 p-0"
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleDelete}
-                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            )}
+            {/* Actions Menu - Always visible on hover */}
+            <div className={`flex items-center gap-1 transition-opacity ${showActions ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleEdit}
+                className="h-6 w-6 p-0 hover:bg-muted"
+              >
+                <Edit2 className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDuplicate}
+                className="h-6 w-6 p-0 hover:bg-muted"
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDelete}
+                className="h-6 w-6 p-0 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         </div>
       </CardContent>

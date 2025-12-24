@@ -2,13 +2,13 @@ import React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Download, 
-  ExternalLink, 
-  File, 
-  FileText, 
-  Image, 
-  Archive, 
+import {
+  Download,
+  ExternalLink,
+  File,
+  FileText,
+  Image,
+  Archive,
   Code,
   X
 } from 'lucide-react';
@@ -65,7 +65,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
   const renderPreview = () => {
     const category = fileUploadService.getFileCategory(file.type);
-    
+
     switch (category) {
       case 'image':
         return (
@@ -81,7 +81,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             />
           </div>
         );
-      
+
       case 'document':
         if (file.type === 'application/pdf') {
           return (
@@ -95,7 +95,7 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           );
         }
         break;
-      
+
       case 'code':
         if (file.size < 100000) { // Only preview small code files
           return (
@@ -149,17 +149,19 @@ const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
               </div>
               <div>
                 <DialogTitle className="text-lg">{file.originalName}</DialogTitle>
-                <DialogDescription className="flex items-center gap-2 mt-1">
-                  <Badge variant="secondary" className="text-xs">
-                    {fileUploadService.getFileCategory(file.type)}
-                  </Badge>
-                  <span>{fileUploadService.formatFileSize(file.size)}</span>
-                  <span>•</span>
-                  <span>Uploaded {new Date(file.uploadedAt).toLocaleDateString()}</span>
+                <DialogDescription asChild>
+                  <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                    <Badge variant="secondary" className="text-xs">
+                      {fileUploadService.getFileCategory(file.type)}
+                    </Badge>
+                    <span>{fileUploadService.formatFileSize(file.size)}</span>
+                    <span>•</span>
+                    <span>Uploaded {new Date(file.uploadedAt).toLocaleDateString()}</span>
+                  </div>
                 </DialogDescription>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"

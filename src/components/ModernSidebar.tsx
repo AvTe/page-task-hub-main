@@ -78,6 +78,13 @@ const ModernSidebar: React.FC<ModernSidebarProps> = ({ isCollapsed, onToggleColl
       badge: workspaceMembers.length
     },
     {
+      name: 'Workspaces',
+      href: '/workspace-management',
+      icon: Building2,
+      current: location.pathname === '/workspace-management',
+      badge: userWorkspaces.length > 1 ? userWorkspaces.length : null
+    },
+    {
       name: 'Analytics',
       href: '/analytics',
       icon: BarChart3,
@@ -190,24 +197,23 @@ const ModernSidebar: React.FC<ModernSidebarProps> = ({ isCollapsed, onToggleColl
             <Link
               key={item.name}
               to={item.href}
-              className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'justify-between px-3'} py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group ${
-                item.current
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              }`}
+              className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'justify-between px-3'} py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group ${item.current
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
               title={isCollapsed ? item.name : undefined}
               {...preloadHandlers}
             >
-            <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
-              <item.icon className={`h-4 w-4 ${item.current ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground'}`} />
-              {!isCollapsed && <span>{item.name}</span>}
-            </div>
-            {!isCollapsed && item.badge !== null && item.badge > 0 && (
-              <Badge variant={item.current ? "secondary" : "outline"} className="text-xs">
-                {item.badge}
-              </Badge>
-            )}
-          </Link>
+              <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
+                <item.icon className={`h-4 w-4 ${item.current ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground'}`} />
+                {!isCollapsed && <span>{item.name}</span>}
+              </div>
+              {!isCollapsed && item.badge !== null && item.badge > 0 && (
+                <Badge variant={item.current ? "secondary" : "outline"} className="text-xs">
+                  {item.badge}
+                </Badge>
+              )}
+            </Link>
           );
         })}
 
@@ -245,19 +251,17 @@ const ModernSidebar: React.FC<ModernSidebarProps> = ({ isCollapsed, onToggleColl
                   <button
                     key={workspace.id}
                     onClick={() => switchWorkspace(workspace.id)}
-                    className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm transition-all duration-200 group ${
-                      currentWorkspace?.id === workspace.id
-                        ? 'bg-primary/10 text-primary border border-primary/20'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                    }`}
+                    className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm transition-all duration-200 group ${currentWorkspace?.id === workspace.id
+                      ? 'bg-primary/10 text-primary border border-primary/20'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                      }`}
                     title={workspace.name}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        currentWorkspace?.id === workspace.id
-                          ? 'bg-primary'
-                          : 'bg-muted-foreground/40'
-                      }`} />
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${currentWorkspace?.id === workspace.id
+                        ? 'bg-primary'
+                        : 'bg-muted-foreground/40'
+                        }`} />
                       <span className="truncate">{workspace.name}</span>
                     </div>
                     {currentWorkspace?.id === workspace.id && (
@@ -276,6 +280,15 @@ const ModernSidebar: React.FC<ModernSidebarProps> = ({ isCollapsed, onToggleColl
                   <Plus className="h-4 w-4" />
                   <span>Create Workspace</span>
                 </button>
+
+                {/* Manage Workspaces Link */}
+                <Link
+                  to="/workspace-management"
+                  className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-all duration-200 group font-medium"
+                >
+                  <Settings className="h-4 w-4" />
+                  <span>Manage Workspaces</span>
+                </Link>
               </div>
             )}
           </div>

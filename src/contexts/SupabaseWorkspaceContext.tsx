@@ -12,6 +12,8 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { emailService } from '../services/emailService';
 import { useNotifications } from './NotificationContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { QUERY_KEYS } from '../lib/queryClient';
 
 interface WorkspaceContextType {
   currentWorkspace: Workspace | null;
@@ -131,6 +133,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
   const [state, dispatch] = useReducer(workspaceReducer, initialState);
   const { user } = useAuth();
   const { createNotification } = useNotifications();
+  const queryClient = useQueryClient();
 
   // Create workspace
   const createWorkspace = async (workspaceData: Omit<Workspace, 'id' | 'createdAt' | 'updatedAt' | 'ownerId' | 'members' | 'inviteCode'>) => {
@@ -161,7 +164,56 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
 
       if (workspaceError) throw workspaceError;
 
-      // Note: Owner is automatically added as member by database trigger
+      // FALLBACK: Ensure owner is added as member with full details
+      // The database trigger should do this, but we add a fallback in case it fails
+      const ownerDisplayName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Unknown User';
+      const ownerEmail = user.email || '';
+
+      try {
+        const { error: memberError } = await supabase
+          .from('workspace_members')
+          .upsert({
+            workspace_id: workspace.id,
+            user_id: user.id,
+            role: 'owner',
+            joined_at: new Date().toISOString(),
+            display_name: ownerDisplayName,
+            email: ownerEmail
+          }, {
+            onConflict: 'workspace_id,user_id',
+            ignoreDuplicates: true
+          });
+
+        if (memberError && memberError.code !== '23505') { // Ignore duplicate key errors
+          console.warn('Failed to add owner as member (trigger may have already done it):', memberError);
+        }
+      } catch (memberInsertError) {
+        console.warn('Owner member insert fallback failed:', memberInsertError);
+        // Don't throw - the trigger may have already added the member
+      }
+
+      // Verify member was added (defensive check)
+      const { data: memberCheck } = await supabase
+        .from('workspace_members')
+        .select('user_id')
+        .eq('workspace_id', workspace.id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!memberCheck) {
+        console.error('CRITICAL: Owner not added as member! Workspace may be orphaned.');
+        // Attempt one more time with a direct insert
+        await supabase
+          .from('workspace_members')
+          .insert({
+            workspace_id: workspace.id,
+            user_id: user.id,
+            role: 'owner',
+            joined_at: new Date().toISOString(),
+            display_name: ownerDisplayName,
+            email: ownerEmail
+          });
+      }
 
       // Convert to frontend format
       const newWorkspace: Workspace = {
@@ -188,6 +240,15 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
 
       dispatch({ type: 'ADD_WORKSPACE', payload: newWorkspace });
       dispatch({ type: 'SET_CURRENT_WORKSPACE', payload: newWorkspace });
+
+      // Invalidate cache to ensure UI updates immediately
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKSPACES });
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_STATS(user.id) });
+      }
+
+      // Force reload workspaces from database to ensure list is updated
+      await loadUserWorkspaces();
 
       // Track activity
       await trackActivity({
@@ -372,9 +433,11 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
 
       // 6. Send email notification
       try {
-        const emailSent = await emailService.sendWorkspaceInvitation(email, {
+        const emailSent = await emailService.sendWorkspaceInvitation({
           workspaceName: workspace.name,
           inviterName: user.user_metadata?.full_name || user.email || 'Someone',
+          inviterEmail: user.email,
+          invitedEmail: email,
           inviteCode: inviteCode,
           role: role,
           workspaceDescription: workspace.description
@@ -536,13 +599,19 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
         return;
       }
 
-      // 3. Add user as member
+      // 3. Add user as member with full details
+      const memberDisplayName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Unknown User';
+      const memberEmail = user.email || '';
+
       const { error: memberError } = await supabase
         .from('workspace_members')
         .insert({
           workspace_id: workspace.id,
           user_id: user.id,
-          role: 'member'
+          role: 'member',
+          joined_at: new Date().toISOString(),
+          display_name: memberDisplayName,
+          email: memberEmail
         });
 
       if (memberError) {
@@ -561,7 +630,15 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
           activity_data: { workspace_name: workspace.name }
         });
 
-      // 5. Refresh workspaces
+      // 5. Invalidate cache to ensure UI updates immediately
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKSPACES });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKSPACE(workspace.id) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKSPACE_MEMBERS(workspace.id) });
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_STATS(user.id) });
+      }
+
+      // 6. Refresh workspaces
       await loadUserWorkspaces();
 
       toast.success(`Successfully joined ${workspace.name}!`);
@@ -571,16 +648,39 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
     }
   };
 
-  const updateUserPresence = async (presence: Partial<UserPresence>) => {
-    // Early return if no user or no valid workspace
-    if (!user || !state.currentWorkspace?.id) return;
+  // Throttle presence updates to prevent spam
+  const lastPresenceUpdate = React.useRef<number>(0);
+  const presenceUpdatePending = React.useRef<boolean>(false);
 
-    // Validate workspace ID is a valid UUID format (not a placeholder)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(state.currentWorkspace.id)) {
-      console.warn('Invalid workspace ID, skipping presence update');
+  const updateUserPresence = async (presence: Partial<UserPresence>) => {
+    // Early return if no user
+    if (!user) return;
+
+    // Skip if no valid workspace is selected
+    if (!state.currentWorkspace?.id) {
+      // Don't log - this is expected behavior
       return;
     }
+
+    // Validate workspace ID is a valid UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(state.currentWorkspace.id)) {
+      return;
+    }
+
+    // Throttle updates to max once per 5 seconds to prevent spam
+    const now = Date.now();
+    if (now - lastPresenceUpdate.current < 5000) {
+      return;
+    }
+
+    // Prevent concurrent updates
+    if (presenceUpdatePending.current) {
+      return;
+    }
+
+    lastPresenceUpdate.current = now;
+    presenceUpdatePending.current = true;
 
     try {
       const presenceData = {
@@ -588,7 +688,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
         workspace_id: state.currentWorkspace.id,
         status: presence.isOnline ? 'online' : 'offline',
         last_seen: presence.lastSeen || new Date().toISOString(),
-        current_page_id: null, // Will be enhanced later
+        current_page_id: null,
         updated_at: new Date().toISOString()
       };
 
@@ -597,21 +697,14 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
         .upsert(presenceData, { onConflict: 'user_id' });
 
       if (error) {
-        // Silently ignore foreign key errors when workspace doesn't exist yet
-        if (error.code === '23503') {
-          console.debug('Workspace not ready for presence update, skipping');
-          return;
-        }
-        // Silently ignore RLS policy violations (user_presence policies may not be set up)
-        if (error.code === '42501') {
-          console.debug('User presence RLS not configured, skipping');
-          return;
-        }
-        console.debug('Error updating user presence:', error);
+        // Silently handle all errors - presence is not critical
+        // 23503 = foreign key error (workspace doesn't exist)
+        // 42501 = RLS policy violation
+        // 409 = conflict
         return;
       }
 
-      // Update local state
+      // Update local state only on success
       const updatedPresence: UserPresence = {
         userId: user.id,
         workspaceId: state.currentWorkspace.id,
@@ -621,16 +714,16 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
         cursor: presence.cursor
       };
 
-      // Update the online users list
       const updatedOnlineUsers = state.onlineUsers.filter(u => u.userId !== user.id);
       if (presence.isOnline !== false) {
         updatedOnlineUsers.push(updatedPresence);
       }
 
       dispatch({ type: 'SET_ONLINE_USERS', payload: updatedOnlineUsers });
-    } catch (error) {
-      // Silently handle presence errors to avoid console spam
-      console.debug('Presence update failed:', error);
+    } catch {
+      // Silently handle all errors
+    } finally {
+      presenceUpdatePending.current = false;
     }
   };
 
@@ -727,6 +820,7 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
   // Load workspace members
   const loadWorkspaceMembers = async (workspaceId: string) => {
     try {
+      // First, get workspace members
       const { data: memberData, error: memberError } = await supabase
         .from('workspace_members')
         .select('user_id, role, joined_at, display_name, email')
@@ -734,25 +828,62 @@ export const SupabaseWorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ ch
 
       if (memberError) {
         console.error('Error loading workspace members:', memberError);
-        // Set empty array on error to prevent infinite loading
         dispatch({ type: 'SET_WORKSPACE_MEMBERS', payload: [] });
         return;
       }
 
-      // Transform the data
-      const members: WorkspaceMember[] = (memberData || []).map(member => ({
-        userId: member.user_id,
-        email: member.email || 'user@example.com',
-        displayName: member.display_name || 'User',
-        photoURL: undefined, // We don't have avatar_url in workspace_members in this schema
-        role: member.role,
-        joinedAt: member.joined_at || new Date().toISOString(),
-        lastActive: new Date().toISOString(),
-        permissions: [],
-        isOnline: true, // simplified for now
-        jobTitle: undefined,
-        department: undefined
-      }));
+      // Get workspace to identify the owner
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('owner_id')
+        .eq('id', workspaceId)
+        .single();
+
+      // Try to get additional user info from users table
+      const userIds = (memberData || []).map(m => m.user_id);
+      let usersData: Record<string, { name?: string; email?: string; avatar_url?: string }> = {};
+
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('id, name, email, avatar_url')
+          .in('id', userIds);
+
+        if (users) {
+          usersData = users.reduce((acc, user) => {
+            acc[user.id] = user;
+            return acc;
+          }, {} as Record<string, { name?: string; email?: string; avatar_url?: string }>);
+        }
+      }
+
+      // Transform the data, prioritizing user table data over workspace_members data
+      const members: WorkspaceMember[] = (memberData || []).map(member => {
+        const userInfo = usersData[member.user_id] || {};
+        const isOwner = workspace?.owner_id === member.user_id;
+
+        return {
+          userId: member.user_id,
+          email: userInfo.email || member.email || 'Unknown email',
+          displayName: userInfo.name || member.display_name || userInfo.email?.split('@')[0] || 'Unknown User',
+          photoURL: userInfo.avatar_url || undefined,
+          role: isOwner ? 'owner' : member.role, // Ensure owner is correctly marked
+          joinedAt: member.joined_at || new Date().toISOString(),
+          lastActive: new Date().toISOString(),
+          permissions: [],
+          isOnline: true, // simplified for now
+          jobTitle: undefined,
+          department: undefined,
+          fullName: userInfo.name || member.display_name
+        };
+      });
+
+      // Sort members: owner first, then admins, then others
+      members.sort((a, b) => {
+        const roleOrder = { owner: 0, admin: 1, member: 2, guest: 3 };
+        return (roleOrder[a.role as keyof typeof roleOrder] || 4) -
+          (roleOrder[b.role as keyof typeof roleOrder] || 4);
+      });
 
       dispatch({ type: 'SET_WORKSPACE_MEMBERS', payload: members });
     } catch (error) {

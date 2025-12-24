@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { useTask } from '../contexts/TaskContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -47,7 +46,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, defaultSta
 
         attachments: attachments
       });
-      
+
       resetForm();
       onClose();
     }
@@ -75,8 +74,11 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, defaultSta
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto sm:max-w-lg md:max-w-2xl mx-4 sm:mx-0">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-gray-800">Add New Task</DialogTitle>
+          <DialogDescription className="sr-only">
+            Fill in the details below to create a new task
+          </DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="title" className="text-sm font-medium text-gray-700">
@@ -92,7 +94,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, defaultSta
               required
             />
           </div>
-          
+
           <div className="space-y-2">
             <Label htmlFor="description" className="text-sm font-medium text-gray-700">
               Description
@@ -206,18 +208,18 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, defaultSta
               showUploadArea={true}
             />
           )}
-          
+
           <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={!title.trim()}
               className="flex-1 bg-gradient-to-r from-coral-orange to-cornflower-blue hover:from-coral-orange/90 hover:to-cornflower-blue/90 text-white font-medium"
             >
               Create Task
             </Button>
-            <Button 
-              type="button" 
-              variant="outline" 
+            <Button
+              type="button"
+              variant="outline"
               onClick={handleCancel}
               className="sm:w-24"
             >

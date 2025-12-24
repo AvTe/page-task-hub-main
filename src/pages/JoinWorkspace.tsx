@@ -14,7 +14,7 @@ const JoinWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const { joinWorkspaceByCode, userWorkspaces } = useWorkspace();
   const { user, loading: authLoading } = useAuth();
-  
+
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,21 +41,58 @@ const JoinWorkspace: React.FC = () => {
           return;
         }
 
-        // Fetch workspace from Supabase
-        const { data: workspaceData, error: workspaceError } = await supabase
-          .from('workspaces')
-          .select(`
-            *,
-            workspace_members (
-              user_id,
-              role,
-              joined_at
-            )
-          `)
-          .eq('invite_code', inviteCode)
-          .single();
+        // Try using the SECURITY DEFINER function first (bypasses RLS)
+        let workspaceData = null;
 
-        if (workspaceError || !workspaceData) {
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('get_workspace_by_invite_code', { p_invite_code: inviteCode });
+
+        if (!rpcError && rpcData && rpcData.length > 0) {
+          // Use RPC function result
+          const wsData = rpcData[0];
+          workspaceData = {
+            id: wsData.workspace_id,
+            name: wsData.workspace_name,
+            description: wsData.workspace_description || '',
+            memberCount: wsData.member_count,
+            inviterName: wsData.inviter_name,
+            role: wsData.role
+          };
+        } else {
+          // Fallback to direct query (for workspaces using invite_code on workspaces table)
+          const { data: wsData, error: workspaceError } = await supabase
+            .from('workspaces')
+            .select(`
+              *,
+              workspace_members (
+                user_id,
+                role,
+                joined_at
+              )
+            `)
+            .eq('invite_code', inviteCode)
+            .single();
+
+          if (workspaceError || !wsData) {
+            setError('Invalid invite link or workspace not found');
+            setLoading(false);
+            return;
+          }
+
+          workspaceData = {
+            id: wsData.id,
+            name: wsData.name,
+            description: wsData.description || '',
+            owner_id: wsData.owner_id,
+            workspace_members: wsData.workspace_members,
+            invite_code: wsData.invite_code,
+            settings: wsData.settings,
+            created_at: wsData.created_at,
+            updated_at: wsData.updated_at
+          };
+        }
+
+        if (!workspaceData) {
           setError('Invalid invite link or workspace not found');
           setLoading(false);
           return;
@@ -66,18 +103,18 @@ const JoinWorkspace: React.FC = () => {
           id: workspaceData.id,
           name: workspaceData.name,
           description: workspaceData.description || '',
-          ownerId: workspaceData.owner_id,
-          members: workspaceData.workspace_members.map((member: any) => ({
+          ownerId: workspaceData.owner_id || '',
+          members: (workspaceData.workspace_members || []).map((member: any) => ({
             userId: member.user_id,
-            email: 'member@example.com', // Would need to fetch from auth.users
-            displayName: 'Team Member', // Would need to fetch from auth.users
+            email: 'member@example.com',
+            displayName: 'Team Member',
             role: member.role,
             joinedAt: member.joined_at,
             lastActive: new Date().toISOString(),
             permissions: [],
             isOnline: false
           })),
-          inviteCode: workspaceData.invite_code,
+          inviteCode: workspaceData.invite_code || inviteCode,
           settings: workspaceData.settings || {
             isPublic: false,
             allowGuestAccess: true,
@@ -91,8 +128,9 @@ const JoinWorkspace: React.FC = () => {
               workspaceUpdates: true
             }
           },
-          createdAt: workspaceData.created_at,
-          updatedAt: workspaceData.updated_at
+          createdAt: workspaceData.created_at || new Date().toISOString(),
+          updatedAt: workspaceData.updated_at || new Date().toISOString(),
+          memberCount: workspaceData.memberCount
         };
 
         setWorkspace(transformedWorkspace);
@@ -109,12 +147,12 @@ const JoinWorkspace: React.FC = () => {
 
   const handleJoinWorkspace = async () => {
     if (!workspace || !inviteCode) return;
-    
+
     try {
       setJoining(true);
       await joinWorkspaceByCode(inviteCode);
       setJoined(true);
-      
+
       // Redirect to workspace after a brief success message
       setTimeout(() => {
         navigate('/');
@@ -150,7 +188,7 @@ const JoinWorkspace: React.FC = () => {
             <p className="text-gray-600">
               You need to sign in to join a workspace.
             </p>
-            <Button 
+            <Button
               onClick={() => navigate('/login')}
               className="bg-gradient-to-r from-coral-orange to-cornflower-blue"
             >
@@ -170,8 +208,8 @@ const JoinWorkspace: React.FC = () => {
             <XCircle className="w-12 h-12 text-red-500 mx-auto" />
             <h2 className="text-xl font-semibold text-gray-900">Unable to Join</h2>
             <p className="text-gray-600">{error}</p>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => navigate('/')}
             >
               Go to Dashboard
@@ -279,7 +317,7 @@ const JoinWorkspace: React.FC = () => {
                     </>
                   )}
                 </Button>
-                
+
                 <Button
                   variant="outline"
                   onClick={() => navigate('/')}

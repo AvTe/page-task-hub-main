@@ -113,7 +113,16 @@ const Home: React.FC = () => {
       .slice(0, 5);
 
   // Get recent websites (last 3) - prefer cached data
-  const recentWebsites = workspacePages?.slice(0, 3) || state.pages.slice(0, 3);
+  // Ensure each website has a tasks array for safety
+  const recentWebsites = (workspacePages || state.pages)
+    .slice(0, 3)
+    .map(page => ({
+      ...page,
+      // Ensure tasks array exists - use cached tasks or page tasks or empty array
+      tasks: (page as any).tasks ||
+        workspaceTasks?.filter(t => (t as any).page_id === page.id || (t as any).pageId === page.id) ||
+        []
+    }));
 
   // Load advanced features data
   useEffect(() => {

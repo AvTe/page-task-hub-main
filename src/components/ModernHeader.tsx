@@ -66,6 +66,7 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({ onToggleSidebar }) => {
       case '/analytics': return 'Analytics';
       case '/calendar': return 'Calendar';
       case '/add-page': return 'Add Website';
+      case '/workspace-management': return 'Workspace Management';
       default: return 'EasTask';
     }
   };
@@ -144,16 +145,14 @@ const ModernHeader: React.FC<ModernHeaderProps> = ({ onToggleSidebar }) => {
                   <DropdownMenuItem
                     key={workspace.id}
                     onClick={() => switchWorkspace(workspace.id)}
-                    className={`flex items-center justify-between ${
-                      currentWorkspace.id === workspace.id ? 'bg-primary/10' : ''
-                    }`}
+                    className={`flex items-center justify-between ${currentWorkspace.id === workspace.id ? 'bg-primary/10' : ''
+                      }`}
                   >
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        currentWorkspace.id === workspace.id
+                      <div className={`w-2 h-2 rounded-full ${currentWorkspace.id === workspace.id
                           ? 'bg-primary'
                           : 'bg-muted-foreground/40'
-                      }`} />
+                        }`} />
                       <span className="truncate">{workspace.name}</span>
                     </div>
                     {currentWorkspace.id === workspace.id && (

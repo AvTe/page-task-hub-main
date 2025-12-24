@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/SupabaseAuthContext';
+import { useSupabaseWorkspace } from '../contexts/SupabaseWorkspaceContext';
 import { Task, TASK_STATUSES, TASK_PRIORITIES } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,15 +28,17 @@ import {
   Eye,
   BarChart3
 } from 'lucide-react';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import TaskCard from './TaskCard';
 import EnhancedTaskCard from './EnhancedTaskCard';
 import AddTaskModal from './AddTaskModal';
+import EnhancedTaskModal from './EnhancedTaskModal';
 
 interface TaskBoardProps {
   view?: 'board' | 'list' | 'calendar';
   showFilters?: boolean;
   compactMode?: boolean;
+  pageId?: string; // Filter tasks by this page/website
 }
 
 interface TaskColumn {
@@ -51,10 +54,12 @@ interface TaskColumn {
 const TaskBoard: React.FC<TaskBoardProps> = ({
   view = 'board',
   showFilters = true,
-  compactMode = false
+  compactMode = false,
+  pageId
 }) => {
   const { state, updateTask, searchTasks } = useTask();
   const { user } = useAuth();
+  const { currentWorkspace, workspaceMembers } = useSupabaseWorkspace();
 
   // State management
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,17 +68,28 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const [sortBy, setSortBy] = useState<string>('dueDate');
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [selectedColumn, setSelectedColumn] = useState<string>('');
-  const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
 
-  // Get all tasks from pages and unassigned
-  const allTasks = [
-    ...state.pages.flatMap(page => page.tasks),
-    ...state.unassignedTasks
-  ];
+  // Memoize allTasks to prevent infinite loop
+  // Filter by pageId if provided, otherwise show all tasks
+  const allTasks = useMemo(() => {
+    if (pageId) {
+      // Filter tasks by the selected page
+      const page = state.pages.find(p => p.id === pageId);
+      return page ? page.tasks : [];
+    }
 
-  // Filter and search tasks
-  useEffect(() => {
-    let filtered = allTasks;
+    // Return all tasks
+    return [
+      ...state.pages.flatMap(page => page.tasks),
+      ...state.unassignedTasks
+    ];
+  }, [state.pages, state.unassignedTasks, pageId]);
+
+  // Filter and search tasks using useMemo (no setState = no infinite loop)
+  const filteredTasks = useMemo(() => {
+    let filtered = [...allTasks];
 
     // Search filter
     if (searchQuery.trim()) {
@@ -103,7 +119,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
           if (!b.dueDate) return -1;
           return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
         case 'priority':
-          const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
+          const priorityOrder: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
           return (priorityOrder[b.priority || 'medium'] || 2) - (priorityOrder[a.priority || 'medium'] || 2);
         case 'created':
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -114,16 +130,16 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
       }
     });
 
-    setFilteredTasks(filtered);
+    return filtered;
   }, [allTasks, searchQuery, selectedPriority, selectedAssignee, sortBy]);
 
-  // Create task columns
+  // Create task columns with theme-aware colors
   const taskColumns: TaskColumn[] = [
     {
       id: 'todo',
       title: 'To Do',
       status: 'todo',
-      color: 'bg-blue-50 border-blue-200',
+      color: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800',
       icon: Circle,
       tasks: filteredTasks.filter(task => task.status === 'todo')
     },
@@ -131,7 +147,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
       id: 'progress',
       title: 'In Progress',
       status: 'progress',
-      color: 'bg-yellow-50 border-yellow-200',
+      color: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800',
       icon: PlayCircle,
       tasks: filteredTasks.filter(task => task.status === 'progress'),
       limit: 3 // WIP limit
@@ -140,7 +156,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
       id: 'done',
       title: 'Done',
       status: 'done',
-      color: 'bg-green-50 border-green-200',
+      color: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
       icon: CheckCircle2,
       tasks: filteredTasks.filter(task => task.status === 'done')
     }
@@ -166,6 +182,17 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const handleQuickAdd = (columnId: string) => {
     setSelectedColumn(columnId);
     setShowAddTaskModal(true);
+  };
+
+  // Handle task click to open detail modal
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setShowTaskDetailModal(true);
+  };
+
+  // Handle task save from modal
+  const handleTaskSave = (taskId: string, updates: Partial<Task>) => {
+    updateTask(taskId, updates);
   };
 
   // Get task statistics
@@ -339,6 +366,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
                               task={task}
                               compact={compactMode}
                               showProject={true}
+                              onTaskClick={handleTaskClick}
                             />
                           </div>
                         )}
@@ -378,6 +406,25 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
           setSelectedColumn('');
         }}
         defaultStatus={selectedColumn as 'todo' | 'progress' | 'done' | undefined}
+      />
+
+      {/* Task Detail Modal */}
+      <EnhancedTaskModal
+        task={selectedTask}
+        isOpen={showTaskDetailModal}
+        onClose={() => {
+          setShowTaskDetailModal(false);
+          setSelectedTask(null);
+        }}
+        onSave={handleTaskSave}
+        allTasks={allTasks}
+        workspaceMembers={workspaceMembers?.map(m => ({
+          id: m.userId,
+          name: m.displayName || m.fullName || m.email || 'Unknown',
+          email: m.email || ''
+        })) || []}
+        workspaceId={currentWorkspace?.id || ''}
+        userId={user?.id || ''}
       />
     </div>
   );

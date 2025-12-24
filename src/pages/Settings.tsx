@@ -3,8 +3,6 @@ import { useAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import ModernLayout from '../components/ModernLayout';
-import DatabaseSetupCheck from '../components/DatabaseSetupCheck';
-import EmailTest from '../components/EmailTest';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -517,10 +515,11 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Switch
-                      checked={notifications.taskReminders}
+                      checked={settings.taskReminders}
                       onCheckedChange={(checked) =>
-                        setNotifications(prev => ({ ...prev, taskReminders: checked }))
+                        setSettings(prev => ({ ...prev, taskReminders: checked }))
                       }
+                      disabled={loading}
                     />
                   </div>
 
@@ -534,10 +533,11 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Switch
-                      checked={notifications.projectUpdates}
+                      checked={settings.projectUpdates}
                       onCheckedChange={(checked) =>
-                        setNotifications(prev => ({ ...prev, projectUpdates: checked }))
+                        setSettings(prev => ({ ...prev, projectUpdates: checked }))
                       }
+                      disabled={loading}
                     />
                   </div>
 
@@ -551,10 +551,11 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Switch
-                      checked={notifications.weeklyDigest}
+                      checked={settings.weeklyDigest}
                       onCheckedChange={(checked) =>
-                        setNotifications(prev => ({ ...prev, weeklyDigest: checked }))
+                        setSettings(prev => ({ ...prev, weeklyDigest: checked }))
                       }
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -579,8 +580,8 @@ const Settings: React.FC = () => {
                   <div className="space-y-2">
                     <Label>Profile Visibility</Label>
                     <Select
-                      value={privacy.profileVisibility}
-                      onValueChange={(value) => setPrivacy(prev => ({ ...prev, profileVisibility: value }))}
+                      value={settings.profileVisibility}
+                      onValueChange={(value) => setSettings(prev => ({ ...prev, profileVisibility: value }))}
                     >
                       <SelectTrigger className="w-48">
                         <SelectValue />
@@ -603,10 +604,11 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Switch
-                      checked={privacy.activityStatus}
+                      checked={settings.activityStatus}
                       onCheckedChange={(checked) =>
-                        setPrivacy(prev => ({ ...prev, activityStatus: checked }))
+                        setSettings(prev => ({ ...prev, activityStatus: checked }))
                       }
+                      disabled={loading}
                     />
                   </div>
 
@@ -620,10 +622,11 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Switch
-                      checked={privacy.dataSharing}
+                      checked={settings.dataSharing}
                       onCheckedChange={(checked) =>
-                        setPrivacy(prev => ({ ...prev, dataSharing: checked }))
+                        setSettings(prev => ({ ...prev, dataSharing: checked }))
                       }
+                      disabled={loading}
                     />
                   </div>
 
@@ -637,10 +640,11 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Switch
-                      checked={privacy.analyticsTracking}
+                      checked={settings.analyticsTracking}
                       onCheckedChange={(checked) =>
-                        setPrivacy(prev => ({ ...prev, analyticsTracking: checked }))
+                        setSettings(prev => ({ ...prev, analyticsTracking: checked }))
                       }
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -734,10 +738,11 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Switch
-                      checked={security.twoFactorAuth}
+                      checked={settings.twoFactorAuth}
                       onCheckedChange={(checked) =>
-                        setSecurity(prev => ({ ...prev, twoFactorAuth: checked }))
+                        setSettings(prev => ({ ...prev, twoFactorAuth: checked }))
                       }
+                      disabled={loading}
                     />
                   </div>
 
@@ -746,8 +751,8 @@ const Settings: React.FC = () => {
                   <div className="space-y-2">
                     <Label>Session Timeout</Label>
                     <Select
-                      value={security.sessionTimeout}
-                      onValueChange={(value) => setSecurity(prev => ({ ...prev, sessionTimeout: value }))}
+                      value={String(settings.sessionTimeout)}
+                      onValueChange={(value) => setSettings(prev => ({ ...prev, sessionTimeout: Number(value) || 30 }))}
                     >
                       <SelectTrigger className="w-48">
                         <SelectValue />
@@ -772,10 +777,11 @@ const Settings: React.FC = () => {
                       </p>
                     </div>
                     <Switch
-                      checked={security.loginAlerts}
+                      checked={settings.loginAlerts}
                       onCheckedChange={(checked) =>
-                        setSecurity(prev => ({ ...prev, loginAlerts: checked }))
+                        setSettings(prev => ({ ...prev, loginAlerts: checked }))
                       }
+                      disabled={loading}
                     />
                   </div>
                 </div>

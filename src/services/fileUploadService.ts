@@ -67,14 +67,14 @@ class FileUploadService {
     const randomId = Math.random().toString(36).substring(2);
     const extension = fileName.split('.').pop();
     const sanitizedName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    
+
     return `${workspaceId}/${timestamp}_${randomId}_${sanitizedName}`;
   }
 
   // Upload file to Supabase Storage
   async uploadFile(
-    file: File, 
-    workspaceId: string, 
+    file: File,
+    workspaceId: string,
     userId: string,
     taskId?: string,
     commentId?: string
@@ -102,9 +102,27 @@ class FileUploadService {
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
+
+        // Check for specific error types
+        const errorMessage = (uploadError as any).message || uploadError.toString();
+
+        if (errorMessage.includes('Bucket not found') || (uploadError as any).error === 'Bucket not found') {
+          return {
+            success: false,
+            error: 'File storage is not configured. Please ask your administrator to create the "task-attachments" storage bucket in Supabase Dashboard.'
+          };
+        }
+
+        if (errorMessage.includes('Policy') || errorMessage.includes('permission')) {
+          return {
+            success: false,
+            error: 'You do not have permission to upload files. Please contact your administrator.'
+          };
+        }
+
         return {
           success: false,
-          error: 'Failed to upload file'
+          error: 'Failed to upload file. Please try again.'
         };
       }
 
@@ -174,12 +192,12 @@ class FileUploadService {
     commentId?: string
   ): Promise<FileUploadResult[]> {
     const results: FileUploadResult[] = [];
-    
+
     for (const file of files) {
       const result = await this.uploadFile(file, workspaceId, userId, taskId, commentId);
       results.push(result);
     }
-    
+
     return results;
   }
 
@@ -347,7 +365,7 @@ class FileUploadService {
   // Get file type category
   getFileCategory(mimeType: string): 'image' | 'document' | 'archive' | 'code' | 'other' {
     if (mimeType.startsWith('image/')) return 'image';
-    
+
     if ([
       'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -356,31 +374,31 @@ class FileUploadService {
     ].includes(mimeType)) {
       return 'document';
     }
-    
+
     if ([
       'application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed'
     ].includes(mimeType)) {
       return 'archive';
     }
-    
+
     if ([
       'text/javascript', 'text/typescript', 'text/html', 'text/css', 'application/json',
       'text/xml', 'application/xml'
     ].includes(mimeType)) {
       return 'code';
     }
-    
+
     return 'other';
   }
 
   // Format file size
   formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
+
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 

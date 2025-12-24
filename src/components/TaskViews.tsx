@@ -4,9 +4,10 @@ import { Task } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  LayoutGrid, 
-  List, 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  LayoutGrid,
+  List,
   Calendar as CalendarIcon,
   Filter,
   SortAsc,
@@ -14,7 +15,8 @@ import {
   Plus,
   Search,
   Eye,
-  EyeOff
+  EyeOff,
+  Globe
 } from 'lucide-react';
 import TaskBoard from './TaskBoard';
 import TaskListView from './TaskListView';
@@ -29,19 +31,22 @@ interface TaskViewsProps {
   showViewToggle?: boolean;
   showFilters?: boolean;
   compactMode?: boolean;
+  pageId?: string; // Filter tasks by this page/website
 }
 
 const TaskViews: React.FC<TaskViewsProps> = ({
   defaultView = 'board',
   showViewToggle = true,
   showFilters = true,
-  compactMode = false
+  compactMode = false,
+  pageId
 }) => {
   const { state } = useTask();
   const [currentView, setCurrentView] = useState(defaultView);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [filtersVisible, setFiltersVisible] = useState(true);
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
+  const [selectedPageId, setSelectedPageId] = useState<string>(pageId || 'all');
   const [filters, setFilters] = useState<TaskFilterOptions>({
     search: '',
     status: [],
@@ -56,8 +61,25 @@ const TaskViews: React.FC<TaskViewsProps> = ({
     showOverdue: true
   });
 
+  // Get all tasks or filter by selected page
+  const allTasks = React.useMemo(() => {
+    const effectivePageId = pageId || selectedPageId;
+
+    if (effectivePageId && effectivePageId !== 'all') {
+      // Filter tasks by the selected page
+      const page = state.pages.find(p => p.id === effectivePageId);
+      return page ? page.tasks : [];
+    }
+
+    // Return all tasks
+    return [
+      ...state.pages.flatMap(page => page.tasks),
+      ...state.unassignedTasks
+    ];
+  }, [state.pages, state.unassignedTasks, pageId, selectedPageId]);
+
   // Get all tasks count
-  const totalTasks = state.pages.reduce((total, page) => total + page.tasks.length, 0) + state.unassignedTasks.length;
+  const totalTasks = allTasks.length;
 
   // View configurations
   const viewConfigs = {
@@ -80,12 +102,6 @@ const TaskViews: React.FC<TaskViewsProps> = ({
       description: 'Calendar view with due dates'
     }
   };
-
-  // Get all tasks for filtering
-  const allTasks = [
-    ...state.pages.flatMap(page => page.tasks),
-    ...state.unassignedTasks
-  ];
 
   // Apply filters to tasks
   const getFilteredTasks = () => {
@@ -168,6 +184,7 @@ const TaskViews: React.FC<TaskViewsProps> = ({
               view="board"
               showFilters={false} // We handle filters above
               compactMode={compactMode}
+              pageId={pageId || (selectedPageId !== 'all' ? selectedPageId : undefined)}
             />
           </div>
         );
@@ -237,14 +254,37 @@ const TaskViews: React.FC<TaskViewsProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Website/Page Filter */}
+          {!pageId && state.pages.length > 0 && (
+            <Select value={selectedPageId} onValueChange={setSelectedPageId}>
+              <SelectTrigger className="w-[180px]">
+                <Globe className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Websites" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Websites</SelectItem>
+                {state.pages.map((page) => (
+                  <SelectItem key={page.id} value={page.id}>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: page.color }}
+                      />
+                      {page.title}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {/* View Toggle */}
           {showViewToggle && (
             <Tabs value={currentView} onValueChange={(value) => setCurrentView(value as any)}>
               <TabsList className="grid w-full grid-cols-3">
                 {Object.values(viewConfigs).map((config) => (
-                  <TabsTrigger 
-                    key={config.id} 
+                  <TabsTrigger
+                    key={config.id}
                     value={config.id}
                     className="flex items-center gap-2"
                   >
@@ -272,7 +312,7 @@ const TaskViews: React.FC<TaskViewsProps> = ({
           )}
 
           {/* Add Task Button */}
-          <Button 
+          <Button
             onClick={() => setShowAddTaskModal(true)}
             className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
           >
